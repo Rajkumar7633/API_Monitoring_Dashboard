@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { usePathname } from "next/navigation"
 import { AlertTriangle, Bell, Calendar, Clock, Menu, Search, X } from "lucide-react"
 import { format } from "date-fns"
 
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
   const { data, isConnected, refreshData } = useSocket()
+  const pathname = usePathname()
 
   const alertSummary = useMemo(() => {
     const list = data?.alerts || []
@@ -84,6 +86,29 @@ export default function Dashboard() {
     refreshData()
   }
 
+  // Close sidebar on route change for small screens
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        setSidebarOpen(false)
+      }
+    } catch {}
+  }, [pathname])
+
+  // Lock body scroll when sidebar is open on small screens
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const unlock = () => { document.body.style.overflow = "" }
+    try {
+      if (sidebarOpen && window.innerWidth < 768) {
+        document.body.style.overflow = "hidden"
+      } else {
+        document.body.style.overflow = ""
+      }
+    } catch {}
+    return unlock
+  }, [sidebarOpen])
+
   // Filter logs based on selected endpoint
   const filteredLogs =
     selectedEndpoint === "all"
@@ -94,6 +119,14 @@ export default function Dashboard() {
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
       <DashboardSidebar open={sidebarOpen} setOpen={setSidebarOpen} />
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          aria-hidden="true"
+        />
+      )}
 
       {/* Main Content */}
       <div className="flex flex-1 flex-col overflow-hidden">

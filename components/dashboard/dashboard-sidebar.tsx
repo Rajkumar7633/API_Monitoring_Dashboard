@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, AlertTriangle, Database, Home, Layers, Settings } from "lucide-react"
+import { Activity, AlertTriangle, Database, Home, Layers, Settings, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface DashboardSidebarProps {
@@ -23,11 +23,18 @@ export function DashboardSidebar({ open, setOpen }: DashboardSidebarProps) {
           <Activity className="h-5 w-5 text-primary" />
           <span>API Monitor</span>
         </div>
+        <button
+          className="ml-auto md:hidden inline-flex h-8 w-8 items-center justify-center rounded hover:bg-accent"
+          onClick={() => setOpen(false)}
+          aria-label="Close menu"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
       <nav className="flex-1 overflow-auto py-4 px-2">
         <div className="space-y-1">
           <Button variant={pathname === "/" ? "default" : "ghost"} className="w-full justify-start gap-2" asChild>
-            <Link href="/">
+            <Link href="/" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
               <Home className="h-4 w-4" />
               Dashboard
             </Link>
@@ -37,7 +44,7 @@ export function DashboardSidebar({ open, setOpen }: DashboardSidebarProps) {
             className="w-full justify-start gap-2"
             asChild
           >
-            <Link href="/services">
+            <Link href="/services" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
               <Layers className="h-4 w-4" />
               Services
             </Link>
@@ -47,13 +54,13 @@ export function DashboardSidebar({ open, setOpen }: DashboardSidebarProps) {
             className="w-full justify-start gap-2"
             asChild
           >
-            <Link href="/databases">
+            <Link href="/databases" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
               <Database className="h-4 w-4" />
               Databases
             </Link>
           </Button>
           <Button variant={pathname === "/alerts" ? "default" : "ghost"} className="w-full justify-start gap-2" asChild>
-            <Link href="/alerts">
+            <Link href="/alerts" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
               <AlertTriangle className="h-4 w-4" />
               Alerts
             </Link>
@@ -63,7 +70,7 @@ export function DashboardSidebar({ open, setOpen }: DashboardSidebarProps) {
             className="w-full justify-start gap-2"
             asChild
           >
-            <Link href="/settings">
+            <Link href="/settings" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
               <Settings className="h-4 w-4" />
               Settings
             </Link>
