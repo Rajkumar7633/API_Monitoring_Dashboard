@@ -418,6 +418,24 @@ server.listen(PORT, () => {
       console.error("Failed to autostart simulator:", e?.message || e)
     }
   }
+
+  // Keepalive ping to prevent Render free instances from idling (best-effort)
+  try {
+    const base = normalizeOrigin(process.env.KEEPALIVE_URL || process.env.RENDER_EXTERNAL_URL || "")
+    const keepAliveUrl = base ? `${base}/api/health` : null
+    const intervalMs = Math.max(60000, Number(process.env.KEEPALIVE_INTERVAL_MS || 300000)) // default 5 min
+    if (keepAliveUrl && typeof setInterval === 'function') {
+      setInterval(async () => {
+        try {
+          // Node 18+ has global fetch; ignore errors silently
+          if (typeof fetch === 'function') {
+            await fetch(keepAliveUrl, { method: 'GET', headers: { 'x-keepalive': '1' } })
+          }
+        } catch (_) {}
+      }, intervalMs)
+      console.log(`Keepalive enabled → pinging ${keepAliveUrl} every ${Math.round(intervalMs/1000)}s`)
+    }
+  } catch (_) {}
 })
 
 module.exports = { app, server }
