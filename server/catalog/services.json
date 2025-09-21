@@ -1,0 +1,56 @@
+[
+  {
+    "name": "User Service",
+    "team": "Identity Platform",
+    "onCall": "identity-oncall@example.com",
+    "repo": "https://github.com/example/user-service",
+    "docs": "https://docs.example.com/user-service",
+    "runbook": "https://runbooks.example.com/user-service",
+    "dependencies": ["Authentication Service", "Notification Service"]
+  },
+  {
+    "name": "Authentication Service",
+    "team": "Identity Platform",
+    "onCall": "identity-oncall@example.com",
+    "repo": "https://github.com/example/auth-service",
+    "docs": "https://docs.example.com/auth-service",
+    "runbook": "https://runbooks.example.com/auth-service",
+    "dependencies": []
+  },
+  {
+    "name": "Product Service",
+    "team": "Catalog",
+    "onCall": "catalog-oncall@example.com",
+    "repo": "https://github.com/example/product-service",
+    "docs": "https://docs.example.com/product-service",
+    "runbook": "https://runbooks.example.com/product-service",
+    "dependencies": []
+  },
+  {
+    "name": "Order Service",
+    "team": "Commerce",
+    "onCall": "commerce-oncall@example.com",
+    "repo": "https://github.com/example/order-service",
+    "docs": "https://docs.example.com/order-service",
+    "runbook": "https://runbooks.example.com/order-service",
+    "dependencies": ["Product Service", "Payment Service"]
+  },
+  {
+    "name": "Payment Service",
+    "team": "Payments",
+    "onCall": "payments-oncall@example.com",
+    "repo": "https://github.com/example/payment-service",
+    "docs": "https://docs.example.com/payment-service",
+    "runbook": "https://runbooks.example.com/payment-service",
+    "dependencies": []
+  },
+  {
+    "name": "Notification Service",
+    "team": "Engage",
+    "onCall": "engage-oncall@example.com",
+    "repo": "https://github.com/example/notification-service",
+    "docs": "https://docs.example.com/notification-service",
+    "runbook": "https://runbooks.example.com/notification-service",
+    "dependencies": []
+  }
+]

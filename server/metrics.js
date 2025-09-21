@@ -1,4 +1,6 @@
 // In-memory storage for metrics
+const { eventBus } = require("./event-bus")
+const { randomUUID } = require("crypto")
 const metrics = {
   stats: {
     totalRequests: 0,
@@ -12,6 +14,7 @@ const metrics = {
   endpoints: [],
   logs: [],
   alerts: [],
+  _alertRecent: new Map(),
   resourceMetrics: {
     cpu: {
       current: 0,
@@ -42,6 +45,22 @@ const metrics = {
   },
   serviceHealth: [],
 }
+
+// Map endpoint => { traceId, ts } from last error snapshot to help correlate alerts to snapshots
+const lastSnapshotByEndpoint = new Map()
+try {
+  eventBus.on('errors:snapshot', (snap) => {
+    if (!snap || !snap.endpoint) return
+    lastSnapshotByEndpoint.set(String(snap.endpoint), { traceId: snap.traceId || null, ts: Number(snap.ts || Date.now()) })
+    // evict old entries occasionally
+    if (lastSnapshotByEndpoint.size > 1000) {
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000
+      for (const [ep, v] of lastSnapshotByEndpoint.entries()) {
+        if (!v || v.ts < cutoff) lastSnapshotByEndpoint.delete(ep)
+      }
+    }
+  })
+} catch {}
 
 // Initialize endpoints
 const defaultEndpoints = ["/api/users", "/api/products", "/api/orders", "/api/auth", "/api/payments"]
@@ -130,6 +149,11 @@ function createMetricsCollector() {
 
     // Add log entry if error
     if (status >= 400) {
+      // optional ignore filters
+      const ignoreList = (process.env.ALERT_IGNORE_ENDPOINTS || "").split(",").map((s) => s.trim()).filter(Boolean)
+      if (ignoreList.includes(endpoint) && status === 404) {
+        // ignore noisy 404s for configured endpoints
+      } else {
       addLog({
         endpoint,
         status,
@@ -137,18 +161,55 @@ function createMetricsCollector() {
         timestamp: new Date().toISOString(),
         duration,
       })
+      }
     }
 
     // Check for alerts
     if (status >= 500) {
       addAlert("error", `Server error on ${endpoint}`, "API Gateway", `Status code: ${status}`)
+      // emit an error snapshot for forensics (simulated)
+      try {
+        eventBus.emit('errors:snapshot', {
+          source: 'simulator',
+          endpoint,
+          method: 'GET',
+          status,
+          requestHeaders: { 'x-simulated': 'true' },
+          requestBody: null,
+          responseSnippet: `Simulated error status=${status}, duration=${Math.round(duration)}ms`,
+          traceId: null,
+          ts: Date.now(),
+        })
+      } catch {}
     } else if (status >= 400) {
-      addAlert("warning", `Client error on ${endpoint}`, "API Gateway", `Status code: ${status}`)
+      const ignoreList = (process.env.ALERT_IGNORE_ENDPOINTS || "").split(",").map((s) => s.trim()).filter(Boolean)
+      if (!(ignoreList.includes(endpoint) && status === 404)) {
+        addAlert("warning", `Client error on ${endpoint}`, "API Gateway", `Status code: ${status}`)
+        // emit a client-error snapshot too (simulated)
+        try {
+          eventBus.emit('errors:snapshot', {
+            source: 'simulator',
+            endpoint,
+            method: 'GET',
+            status,
+            requestHeaders: { 'x-simulated': 'true' },
+            requestBody: null,
+            responseSnippet: `Simulated client error status=${status}, duration=${Math.round(duration)}ms`,
+            traceId: null,
+            ts: Date.now(),
+          })
+        } catch {}
+      }
     }
 
     if (duration > 500) {
       addAlert("warning", `Slow response on ${endpoint}`, "API Gateway", `Response time: ${duration}ms`)
     }
+
+    // Emit granular updates
+    eventBus.emit("metrics:api", { endpoint, duration, status })
+    eventBus.emit("metrics:stats", { stats: metrics.stats })
+    eventBus.emit("metrics:endpoint", { endpoint: endpointData })
   }
 
   // Record database query
@@ -187,10 +248,13 @@ function createMetricsCollector() {
       metrics.databaseMetrics.connections.max - metrics.databaseMetrics.connections.active
     metrics.databaseMetrics.connections.usedPercentage =
       (metrics.databaseMetrics.connections.active / metrics.databaseMetrics.connections.max) * 100
+
+    // Emit database update
+    eventBus.emit("metrics:db", { query: query.substring(0, 100), duration, databaseMetrics: metrics.databaseMetrics })
   }
 
   // Record service health
-  const recordServiceHealth = (service, status, responseTime) => {
+  const recordServiceHealth = (service, status, responseTime, uptimeStr) => {
     const serviceData = metrics.serviceHealth.find((s) => s.name === service)
 
     if (serviceData) {
@@ -198,6 +262,7 @@ function createMetricsCollector() {
       serviceData.status = status
       serviceData.responseTime = responseTime
       serviceData.lastChecked = new Date().toISOString()
+      if (uptimeStr) serviceData.uptime = uptimeStr
 
       // Alert on status change
       if (previousStatus !== serviceData.status) {
@@ -209,18 +274,45 @@ function createMetricsCollector() {
           addAlert("info", `${service} has recovered`, service, "Service is now healthy")
         }
       }
+
+      // Emit service health update
+      eventBus.emit("metrics:service", { service: serviceData })
     }
   }
 
   // Add alert
   const addAlert = (type, message, service, details) => {
+    // de-duplication with cooldown
+    const cooldownMs = Number(process.env.ALERT_DEDUP_COOLDOWN_MS || 60000)
+    const key = `${type}|${service}|${message}`
+    const now = Date.now()
+    const last = metrics._alertRecent.get(key) || 0
+    if (now - last < cooldownMs) {
+      return // drop duplicate within cooldown
+    }
+    metrics._alertRecent.set(key, now)
+    // try to infer endpoint from message like "... on /api/foo"
+    let endpoint = null
+    try {
+      const m = String(message || '').match(/\son\s(\/[^\s]+)/i)
+      endpoint = m ? m[1] : null
+    } catch {}
+
+    const traceHint = endpoint && lastSnapshotByEndpoint.get(endpoint)
+
+    const nowIso = new Date().toISOString()
     const alert = {
-      id: Date.now(),
+      id: randomUUID(),
       type,
       message,
       time: "just now",
       service,
       details,
+      status: "active",
+      acknowledgedAt: null,
+      resolvedAt: null,
+      traceId: traceHint?.traceId || null,
+      createdAt: nowIso,
     }
 
     metrics.alerts.unshift(alert)
@@ -229,12 +321,34 @@ function createMetricsCollector() {
     if (metrics.alerts.length > 100) {
       metrics.alerts.pop()
     }
+
+    // Emit alert event
+    eventBus.emit("metrics:alert", alert)
+  }
+
+  // Update alert status (acknowledge/resolve)
+  const updateAlertStatus = (id, action) => {
+    const idx = metrics.alerts.findIndex((a) => String(a.id) === String(id))
+    if (idx === -1) return null
+    const a = metrics.alerts[idx]
+    if (action === "ack") {
+      a.status = "acknowledged"
+      a.acknowledgedAt = new Date().toISOString()
+    } else if (action === "resolve") {
+      a.status = "resolved"
+      a.resolvedAt = new Date().toISOString()
+    }
+    // move updated alert to front
+    metrics.alerts.splice(idx, 1)
+    metrics.alerts.unshift(a)
+    eventBus.emit("metrics:alert", a)
+    return a
   }
 
   // Add log
   const addLog = (logData) => {
     const log = {
-      id: Date.now(),
+      id: randomUUID(),
       ...logData,
     }
 
@@ -244,6 +358,9 @@ function createMetricsCollector() {
     if (metrics.logs.length > 1000) {
       metrics.logs.pop()
     }
+
+    // Emit log event
+    eventBus.emit("metrics:log", log)
   }
 
   // Update resource metrics
@@ -269,19 +386,10 @@ function createMetricsCollector() {
     metrics.resourceMetrics.memory.used = Math.round(usedMem / (1024 * 1024 * 1024))
     metrics.resourceMetrics.memory.usedPercentage = Math.round((usedMem / totalMem) * 100)
 
-    // Alert on high resource usage
-    if (metrics.resourceMetrics.cpu.current > 80) {
-      addAlert("warning", "High CPU usage detected", "System", `CPU usage: ${metrics.resourceMetrics.cpu.current}%`)
-    }
+    // Removed direct CPU/memory alerts here; the alert engine (alerts.js) evaluates thresholds
 
-    if (metrics.resourceMetrics.memory.usedPercentage > 80) {
-      addAlert(
-        "warning",
-        "High memory usage detected",
-        "System",
-        `Memory usage: ${metrics.resourceMetrics.memory.usedPercentage}%`,
-      )
-    }
+    // Emit resource metrics update
+    eventBus.emit("metrics:resources", { resourceMetrics: metrics.resourceMetrics })
   }
 
   // Get all data
@@ -300,6 +408,7 @@ function createMetricsCollector() {
     recordDatabaseQuery,
     recordServiceHealth,
     addAlert,
+    updateAlertStatus,
     addLog,
     updateResourceMetrics,
     getAllData,

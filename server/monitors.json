@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Homepage",
+    "url": "http://localhost:3000/",
+    "method": "GET",
+    "expectedStatus": 200,
+    "maxLatencyMs": 1000,
+    "intervalMs": 60000
+  },
+  {
+    "name": "API Health",
+    "url": "http://localhost:3001/api/health",
+    "method": "GET",
+    "expectedStatus": 200,
+    "maxLatencyMs": 800,
+    "intervalMs": 60000
+  }
+]

@@ -1,60 +1,90 @@
 function setupAlertSystem(metricsCollector) {
   // Configure alert thresholds
   const thresholds = {
-    errorRate: 5, // 5% error rate
-    responseTime: 500, // 500ms
-    cpuUsage: 80, // 80% CPU usage
-    memoryUsage: 75, // 75% memory usage
-    databaseQueryTime: 500, // 500ms for slow queries
+    errorRate: Number(process.env.THRESHOLD_ERROR_RATE || 5), // %
+    responseTime: Number(process.env.THRESHOLD_RESPONSE_TIME || 500), // ms
+    cpuUsage: Number(process.env.THRESHOLD_CPU || 80), // %
+    memoryUsage: Number(process.env.THRESHOLD_MEMORY || 75), // %
+    databaseQueryTime: Number(process.env.THRESHOLD_DB_QUERY || 500), // ms
+  }
+
+  const useRandom = process.env.ENABLE_RANDOM_ALERTS === 'true'
+
+ 
+  metricsCollector.getAlertThresholds = () => ({ ...thresholds })
+  metricsCollector.setAlertThresholds = (updates = {}) => {
+    const allowed = [
+      'errorRate',
+      'responseTime',
+      'cpuUsage',
+      'memoryUsage',
+      'databaseQueryTime',
+    ]
+    for (const k of Object.keys(updates || {})) {
+      if (allowed.includes(k)) {
+        const num = Number(updates[k])
+        if (!Number.isNaN(num)) thresholds[k] = num
+      }
+    }
+    return { ...thresholds }
   }
 
   // Set up periodic checks for threshold violations
   setInterval(() => {
-    // Simulate random metrics
-    const currentMetrics = {
-      errorRate: Math.random() * 10,
-      responseTime: 200 + Math.random() * 500,
-      cpuUsage: 50 + Math.random() * 50,
-      memoryUsage: 60 + Math.random() * 30,
+    let snapshot
+    if (useRandom) {
+      snapshot = {
+        stats: { errorRate: Math.random() * 10, avgResponseTime: 200 + Math.random() * 500 },
+        resourceMetrics: {
+          cpu: { current: 50 + Math.random() * 50 },
+          memory: { usedPercentage: 60 + Math.random() * 30 },
+        },
+      }
+    } else {
+      snapshot = metricsCollector.getAllData()
     }
 
-    // Check for threshold violations
-    if (currentMetrics.errorRate > thresholds.errorRate) {
+    const currentErrorRate = snapshot.stats?.errorRate || 0
+    const currentAvgResp = snapshot.stats?.avgResponseTime || 0
+    const currentCpu = snapshot.resourceMetrics?.cpu?.current || 0
+    const currentMem = snapshot.resourceMetrics?.memory?.usedPercentage || 0
+
+    if (currentErrorRate > thresholds.errorRate) {
       metricsCollector.addAlert(
-        "error",
-        `High error rate detected: ${currentMetrics.errorRate.toFixed(1)}%`,
-        "API Gateway",
-        `Threshold: ${thresholds.errorRate}%`,
+        'error',
+        'High error rate detected',
+        'API Gateway',
+        `Current: ${currentErrorRate.toFixed(1)}% | Threshold: ${thresholds.errorRate}%`,
       )
     }
 
-    if (currentMetrics.responseTime > thresholds.responseTime) {
+    if (currentAvgResp > thresholds.responseTime) {
       metricsCollector.addAlert(
-        "warning",
-        `Slow response time: ${currentMetrics.responseTime.toFixed(0)}ms`,
-        "API Gateway",
-        `Threshold: ${thresholds.responseTime}ms`,
+        'warning',
+        'Slow average response time',
+        'API Gateway',
+        `Current: ${currentAvgResp.toFixed(0)}ms | Threshold: ${thresholds.responseTime}ms`,
       )
     }
 
-    if (currentMetrics.cpuUsage > thresholds.cpuUsage) {
+    if (currentCpu > thresholds.cpuUsage) {
       metricsCollector.addAlert(
-        "warning",
-        `High CPU usage: ${currentMetrics.cpuUsage.toFixed(1)}%`,
-        "System",
-        `Threshold: ${thresholds.cpuUsage}%`,
+        'warning',
+        'High CPU usage detected',
+        'System',
+        `Current: ${currentCpu.toFixed(1)}% | Threshold: ${thresholds.cpuUsage}%`,
       )
     }
 
-    if (currentMetrics.memoryUsage > thresholds.memoryUsage) {
+    if (currentMem > thresholds.memoryUsage) {
       metricsCollector.addAlert(
-        "warning",
-        `High memory usage: ${currentMetrics.memoryUsage.toFixed(1)}%`,
-        "System",
-        `Threshold: ${thresholds.memoryUsage}%`,
+        'warning',
+        'High memory usage detected',
+        'System',
+        `Current: ${currentMem.toFixed(1)}% | Threshold: ${thresholds.memoryUsage}%`,
       )
     }
-  }, 60000) // Check every minute
+  }, Number(process.env.ALERT_CHECK_INTERVAL_MS || 60000)) // Check every minute by default
 }
 
 module.exports = { setupAlertSystem }

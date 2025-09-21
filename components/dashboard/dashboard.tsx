@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { AlertTriangle, Bell, Calendar, Clock, Menu, Search, X } from "lucide-react"
 import { format } from "date-fns"
 
@@ -10,12 +10,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/compon
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { useToast } from "@/components/ui/use-toast"
+import { Card, CardContent } from "@/components/ui/card"
 
 import { FilterBar } from "@/components/dashboard/filter-bar"
 import { StatsCards } from "@/components/dashboard/stats-cards"
 import { ResponseTimeChart } from "@/components/dashboard/response-time-chart"
 import { RequestsChart } from "@/components/dashboard/requests-chart"
 import { SystemResources } from "@/components/dashboard/system-resources"
+import { LatencyHeatmap } from "@/components/dashboard/latency-heatmap"
+import { SloSummary } from "@/components/dashboard/slo-summary"
 import { ErrorLogs } from "@/components/dashboard/error-logs"
 import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar"
 import { useSocket } from "@/lib/socket-provider"
@@ -28,6 +31,40 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
   const { data, isConnected, refreshData } = useSocket()
+
+  const alertSummary = useMemo(() => {
+    const list = data?.alerts || []
+    const all = list.length
+    const active = list.filter((a:any) => a.status === 'active').length
+    const acknowledged = list.filter((a:any) => a.status === 'acknowledged').length
+    const resolved = list.filter((a:any) => a.status === 'resolved').length
+    const solvedRate = all ? Math.round((resolved / all) * 100) : 0
+    const now = Date.now()
+    const oneHourAgo = now - 60 * 60 * 1000
+    const parseTs = (s?:string|null) => (s ? new Date(s).getTime() : NaN)
+    const ackSamples = list.filter((a:any)=> a.acknowledgedAt && a.createdAt)
+      .map((a:any)=> parseTs(a.acknowledgedAt) - parseTs(a.createdAt))
+      .filter((d:number)=> isFinite(d) && d>=0)
+    const mttaMs = ackSamples.length ? Math.round(ackSamples.reduce((x:number,y:number)=>x+y,0) / ackSamples.length) : 0
+    const resSamples = list.filter((a:any)=> a.resolvedAt && a.createdAt)
+      .map((a:any)=> parseTs(a.resolvedAt) - parseTs(a.createdAt))
+      .filter((d:number)=> isFinite(d) && d>=0)
+    const mttrMs = resSamples.length ? Math.round(resSamples.reduce((x:number,y:number)=>x+y,0) / resSamples.length) : 0
+    const activeDelta1h = list.filter((a:any)=> parseTs(a.createdAt) >= oneHourAgo).length
+    const resolvedDelta1h = list.filter((a:any)=> parseTs(a.resolvedAt) >= oneHourAgo).length
+    return { all, active, acknowledged, resolved, solvedRate, mttaMs, mttrMs, activeDelta1h, resolvedDelta1h }
+  }, [data?.alerts])
+
+  const fmtDuration = (ms:number) => {
+    if (!ms || !isFinite(ms)) return '—'
+    if (ms < 1000) return `${ms} ms`
+    const s = Math.round(ms/1000)
+    if (s < 60) return `${s}s`
+    const m = Math.floor(s/60); const rs = s%60
+    if (m < 60) return `${m}m ${rs}s`
+    const h = Math.floor(m/60); const rm = m%60
+    return `${h}h ${rm}m`
+  }
 
   // Set loading state based on data availability
   useEffect(() => {
@@ -148,8 +185,7 @@ export default function Dashboard() {
               <h1 className="text-2xl font-bold tracking-tight">API Performance Dashboard</h1>
               <p className="text-muted-foreground">
                 Monitor your API performance, errors, and system resources in real-time.
-                {!isConnected && <span className="ml-2 text-amber-500">(Demo Mode - Using sample data)</span>}
-                {isConnected && <span className="ml-2 text-green-500">(Connected to server)</span>}
+                {isConnected && <span className="ml-2 text-green-500">(Connected)</span>}
               </p>
             </div>
 
@@ -166,6 +202,45 @@ export default function Dashboard() {
             {/* Stats Cards */}
             <StatsCards stats={data?.stats} loading={loading} />
 
+            {/* Alerts Summary */}
+            <Card>
+              <CardContent className="pt-4">
+                <div className="grid gap-4 md:grid-cols-4">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Total Alerts</div>
+                    <div className="text-xl font-semibold">{alertSummary.all}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Active</div>
+                    <div className="text-xl font-semibold">{alertSummary.active} {alertSummary.activeDelta1h ? <span className="text-xs text-muted-foreground">(+{alertSummary.activeDelta1h} 1h)</span> : null}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Acknowledged</div>
+                    <div className="text-xl font-semibold">{alertSummary.acknowledged}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Resolved (Rate)</div>
+                    <div className="text-xl font-semibold">{alertSummary.resolved} <span className="text-sm text-muted-foreground">({alertSummary.solvedRate}% solved)</span> {alertSummary.resolvedDelta1h ? <span className="text-xs text-muted-foreground">(+{alertSummary.resolvedDelta1h} 1h)</span> : null}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs text-muted-foreground">MTTA (avg acknowledge time)</div>
+                    <div className="text-xl font-semibold">{fmtDuration(alertSummary.mttaMs)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">MTTR (avg resolve time)</div>
+                    <div className="text-xl font-semibold">{fmtDuration(alertSummary.mttrMs)}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Charts */}
             <div className="grid gap-4 md:grid-cols-2">
               {/* Response Time Chart */}
@@ -178,6 +253,12 @@ export default function Dashboard() {
               {/* API Requests Chart */}
               <RequestsChart endpoints={data?.endpoints || []} loading={loading} />
             </div>
+
+            {/* Latency Heatmap */}
+            <LatencyHeatmap endpoint={selectedEndpoint} />
+
+            {/* SLO Summary */}
+            <SloSummary endpoint={selectedEndpoint} />
 
             {/* System Resources */}
             <SystemResources metrics={data?.resourceMetrics} loading={loading} />
