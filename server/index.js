@@ -27,10 +27,30 @@ const { getActiveTraceId } = require("./tracing")
 const app = express()
 const server = http.createServer(app)
 
-// Configure CORS
+// Configure CORS with normalized, allowlisted origins
+function normalizeOrigin(value) {
+  try {
+    if (!value) return "";
+    return String(value).replace(/\/+$/g, "");
+  } catch (_) { return String(value || ""); }
+}
+
+const envList = (process.env.FRONTEND_URLS || "").split(",").map(s => s.trim()).filter(Boolean)
+const single = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []
+const defaults = ["http://localhost:3000"]
+const allowList = [...new Set([...envList, ...single, ...defaults].map(normalizeOrigin))]
+
+app.use((req, res, next) => { res.setHeader('Vary', 'Origin'); next(); })
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow non-browser requests (no Origin)
+      if (!origin) return callback(null, true)
+      const o = normalizeOrigin(origin)
+      if (allowList.includes(o)) return callback(null, true)
+      return callback(new Error(`CORS not allowed for origin: ${origin}`), false)
+    },
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   }),
@@ -97,6 +117,9 @@ setupRealtime(app)
 initPersistenceApi(app)
 
 // API routes
+app.get('/', (req, res) => {
+  res.type('text').send('API backend is running. Try /api/health or /api/dashboard-data')
+})
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" })
 })
