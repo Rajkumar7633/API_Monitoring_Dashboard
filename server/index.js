@@ -22,6 +22,18 @@ const crypto = require("crypto")
 const { startTracing } = require("./tracing")
 const { eventBus } = require("./event-bus")
 const { getActiveTraceId } = require("./tracing")
+const { 
+  userManagement, 
+  createAuthMiddleware, 
+  requirePermission, 
+  ROLES, 
+  PERMISSIONS 
+} = require("./auth")
+const { IndianFeatures } = require("./indian-features")
+const { MLAlertOptimizer } = require("./ml-alerts")
+const { CollaborationManager } = require("./collaboration")
+const { ReportingEngine } = require("./reporting")
+const { IntegrationMarketplace } = require("./integrations")
 
 // Create Express app
 const app = express()
@@ -94,6 +106,11 @@ app.use((req, res, next) => {
 const metricsCollector = createMetricsCollector()
 const simulator = createSimulator(metricsCollector)
 const synthetics = createSynthetics(metricsCollector)
+const indianFeatures = new IndianFeatures()
+const mlAlertOptimizer = new MLAlertOptimizer()
+const collaborationManager = new CollaborationManager()
+const reportingEngine = new ReportingEngine()
+const integrationMarketplace = new IntegrationMarketplace()
 
 // Set up API monitoring
 setupApiMonitoring(app, metricsCollector)
@@ -120,6 +137,112 @@ initPersistenceApi(app)
 app.get('/', (req, res) => {
   res.type('text').send('API backend is running. Try /api/health or /api/dashboard-data')
 })
+
+// Authentication endpoints
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { username, password } = req.body
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' })
+    }
+    
+    const user = userManagement.verifyUser(username, password)
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+    
+    const sessionToken = userManagement.createSession(user)
+    
+    res.json({
+      user,
+      token: sessionToken,
+      permissions: ROLE_PERMISSIONS[user.role] || []
+    })
+  } catch (e) {
+    res.status(500).json({ error: 'Login failed' })
+  }
+})
+
+app.post('/api/auth/logout', (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '') || 
+                  req.body?.token
+    
+    if (token) {
+      userManagement.removeSession(token)
+    }
+    
+    res.json({ success: true, message: 'Logged out successfully' })
+  } catch (e) {
+    res.status(500).json({ error: 'Logout failed' })
+  }
+})
+
+app.get('/api/auth/me', (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' })
+    }
+    
+    const session = userManagement.validateSession(token)
+    if (!session) {
+      return res.status(401).json({ error: 'Invalid or expired token' })
+    }
+    
+    res.json({
+      user: session,
+      permissions: ROLE_PERMISSIONS[session.role] || []
+    })
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to get user info' })
+  }
+})
+
+// User management endpoints (admin only)
+app.get('/api/users', requirePermission(PERMISSIONS.USERS_VIEW), (req, res) => {
+  try {
+    const users = userManagement.getUsers()
+    res.json(users)
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to get users' })
+  }
+})
+
+app.post('/api/users', requirePermission(PERMISSIONS.USERS_CREATE), (req, res) => {
+  try {
+    const newUser = userManagement.createUser(req.body)
+    res.status(201).json(newUser)
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to create user' })
+  }
+})
+
+app.put('/api/users/:id', requirePermission(PERMISSIONS.USERS_EDIT), (req, res) => {
+  try {
+    const updatedUser = userManagement.updateUser(req.params.id, req.body)
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+    res.json(updatedUser)
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update user' })
+  }
+})
+
+app.delete('/api/users/:id', requirePermission(PERMISSIONS.USERS_DELETE), (req, res) => {
+  try {
+    const success = userManagement.deleteUser(req.params.id)
+    if (!success) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+    res.json({ success: true, message: 'User deleted successfully' })
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to delete user' })
+  }
+})
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" })
 })
@@ -363,13 +486,662 @@ app.post("/api/health/run", async (req, res) => {
   }
 })
 
+// Anomaly Detection API endpoints
+app.get("/api/anomaly/stats", (req, res) => {
+  try {
+    const anomalyDetector = metricsCollector.getAnomalyDetector()
+    if (!anomalyDetector) {
+      return res.status(404).json({ error: "Anomaly detector not available" })
+    }
+    const stats = anomalyDetector.getAnomalyStats()
+    res.json(stats)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get anomaly stats" })
+  }
+})
+
+app.get("/api/anomaly/predict/:endpoint/:metric", (req, res) => {
+  try {
+    const anomalyDetector = metricsCollector.getAnomalyDetector()
+    if (!anomalyDetector) {
+      return res.status(404).json({ error: "Anomaly detector not available" })
+    }
+    const { endpoint, metric } = req.params
+    const { steps = 1 } = req.query
+    const prediction = anomalyDetector.predictNext(endpoint, metric, parseInt(steps))
+    res.json(prediction)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get prediction" })
+  }
+})
+
+app.get("/api/anomaly/health/:endpoint", (req, res) => {
+  try {
+    const anomalyDetector = metricsCollector.getAnomalyDetector()
+    if (!anomalyDetector) {
+      return res.status(404).json({ error: "Anomaly detector not available" })
+    }
+    const { endpoint } = req.params
+    const healthScore = anomalyDetector.getHealthScore(endpoint)
+    res.json({ endpoint, healthScore })
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get health score" })
+  }
+})
+
+app.post("/api/anomaly/configure", (req, res) => {
+  try {
+    const anomalyDetector = metricsCollector.getAnomalyDetector()
+    if (!anomalyDetector) {
+      return res.status(404).json({ error: "Anomaly detector not available" })
+    }
+    anomalyDetector.configure(req.body || {})
+    res.json({ success: true, message: "Anomaly detector configured" })
+  } catch (e) {
+    res.status(500).json({ error: "Failed to configure anomaly detector" })
+  }
+})
+
+// Indian Market Features API endpoints
+app.get("/api/indian/region/:ip", (req, res) => {
+  try {
+    const { ip } = req.params
+    const regionInfo = indianFeatures.detectIndianRegion(ip)
+    res.json(regionInfo)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to detect region" })
+  }
+})
+
+app.get("/api/indian/holidays", (req, res) => {
+  try {
+    const holidays = indianFeatures.indianHolidays
+    const today = indianFeatures.isIndianHoliday()
+    res.json({ holidays, todayHoliday: today })
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get holidays" })
+  }
+})
+
+app.get("/api/indian/business-hours/:region?", (req, res) => {
+  try {
+    const { region } = req.params
+    const businessHours = indianFeatures.getIndianBusinessHours(region)
+    res.json(businessHours)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get business hours" })
+  }
+})
+
+app.get("/api/indian/isp/:hostname/:ip", (req, res) => {
+  try {
+    const { hostname, ip } = req.params
+    const ispInfo = indianFeatures.detectIndianISP(hostname, ip)
+    res.json(ispInfo)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to detect ISP" })
+  }
+})
+
+app.get("/api/indian/benchmarks/:region", (req, res) => {
+  try {
+    const { region } = req.params
+    const benchmarks = indianFeatures.getRegionalBenchmarks(region)
+    res.json(benchmarks)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get benchmarks" })
+  }
+})
+
+app.get("/api/indian/compliance", (req, res) => {
+  try {
+    const compliance = indianFeatures.getComplianceInfo()
+    res.json(compliance)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get compliance info" })
+  }
+})
+
+app.get("/api/indian/insights", (req, res) => {
+  try {
+    const insights = indianFeatures.getMarketInsights()
+    res.json(insights)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get market insights" })
+  }
+})
+
+app.post("/api/indian/analyze", (req, res) => {
+  try {
+    const { metrics, region, timeOfDay } = req.body
+    const analysis = indianFeatures.analyzeIndianPerformance(metrics, region, timeOfDay)
+    res.json(analysis)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to analyze performance" })
+  }
+})
+
+// ML-based Alert Optimization API endpoints
+app.get("/api/ml/thresholds/:endpoint/:metric", (req, res) => {
+  try {
+    const { endpoint, metric } = req.params
+    const thresholds = mlAlertOptimizer.getOptimizedThresholds(endpoint, metric)
+    res.json(thresholds)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get ML thresholds" })
+  }
+})
+
+app.post("/api/ml/train", (req, res) => {
+  try {
+    mlAlertOptimizer.trainModels()
+    res.json({ success: true, message: "ML models trained successfully" })
+  } catch (e) {
+    res.status(500).json({ error: "Failed to train ML models" })
+  }
+})
+
+app.get("/api/ml/insights", (req, res) => {
+  try {
+    const insights = mlAlertOptimizer.getMLInsights()
+    res.json(insights)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get ML insights" })
+  }
+})
+
+app.post("/api/ml/configure", (req, res) => {
+  try {
+    mlAlertOptimizer.configure(req.body || {})
+    res.json({ success: true, message: "ML alert optimizer configured" })
+  } catch (e) {
+    res.status(500).json({ error: "Failed to configure ML optimizer" })
+  }
+})
+
+app.get("/api/ml/export", (req, res) => {
+  try {
+    const models = mlAlertOptimizer.exportModels()
+    res.json(models)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to export ML models" })
+  }
+})
+
+app.post("/api/ml/import", (req, res) => {
+  try {
+    mlAlertOptimizer.importModels(req.body || {})
+    res.json({ success: true, message: "ML models imported successfully" })
+  } catch (e) {
+    res.status(500).json({ error: "Failed to import ML models" })
+  }
+})
+
+app.post("/api/ml/performance", (req, res) => {
+  try {
+    const { endpoint, metric, value } = req.body
+    mlAlertOptimizer.addPerformanceData(endpoint, metric, value)
+    
+    // Get prediction
+    const prediction = mlAlertOptimizer.predictAlert(endpoint, metric, value)
+    res.json({ success: true, prediction })
+  } catch (e) {
+    res.status(500).json({ error: "Failed to process performance data" })
+  }
+})
+
+// Collaboration API endpoints
+app.post("/api/collaboration/dashboards", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const userId = req.user.userId
+    const dashboard = collaborationManager.createSharedDashboard(userId, req.body)
+    res.status(201).json(dashboard)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to create shared dashboard" })
+  }
+})
+
+app.get("/api/collaboration/dashboards", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const userId = req.user.userId
+    const dashboards = collaborationManager.getUserDashboards(userId)
+    res.json(dashboards)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get user dashboards" })
+  }
+})
+
+app.put("/api/collaboration/dashboards/:id", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.userId
+    const dashboard = collaborationManager.updateSharedDashboard(id, userId, req.body)
+    res.json(dashboard)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to update dashboard" })
+  }
+})
+
+app.post("/api/collaboration/dashboards/:id/collaborators", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.userId
+    const { email, role } = req.body
+    const collaborator = collaborationManager.addCollaborator(id, userId, email, role)
+    res.status(201).json(collaborator)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to add collaborator" })
+  }
+})
+
+app.delete("/api/collaboration/dashboards/:id/collaborators/:collaboratorId", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id, collaboratorId } = req.params
+    const userId = req.user.userId
+    const removed = collaborationManager.removeCollaborator(id, userId, collaboratorId)
+    res.json(removed)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to remove collaborator" })
+  }
+})
+
+app.get("/api/collaboration/dashboards/:id/comments", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const comments = collaborationManager.getDashboardComments(id)
+    res.json(comments)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get comments" })
+  }
+})
+
+app.post("/api/collaboration/dashboards/:id/comments", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.userId
+    const { content, position } = req.body
+    const comment = collaborationManager.addComment(id, userId, content, position)
+    res.status(201).json(comment)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to add comment" })
+  }
+})
+
+app.post("/api/collaboration/dashboards/:id/comments/:commentId/reply", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id, commentId } = req.params
+    const userId = req.user.userId
+    const { content } = req.body
+    const reply = collaborationManager.replyToComment(id, commentId, userId, content)
+    res.status(201).json(reply)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to reply to comment" })
+  }
+})
+
+app.put("/api/collaboration/dashboards/:id/comments/:commentId/resolve", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id, commentId } = req.params
+    const userId = req.user.userId
+    const comment = collaborationManager.resolveComment(id, commentId, userId)
+    res.json(comment)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to resolve comment" })
+  }
+})
+
+app.get("/api/collaboration/dashboards/:id/activities", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const { limit = 50 } = req.query
+    const activities = collaborationManager.getDashboardActivities(id, parseInt(limit))
+    res.json(activities)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get activities" })
+  }
+})
+
+app.get("/api/collaboration/dashboards/:id/stats", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const stats = collaborationManager.getDashboardStats(id)
+    res.json(stats)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get dashboard stats" })
+  }
+})
+
+app.get("/api/collaboration/search", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const userId = req.user.userId
+    const { query, tags, startDate, endDate } = req.query
+    
+    const filters = {}
+    if (tags) filters.tags = Array.isArray(tags) ? tags : [tags]
+    if (startDate) filters.startDate = startDate
+    if (endDate) filters.endDate = endDate
+    
+    const results = collaborationManager.searchDashboards(userId, query, filters)
+    res.json(results)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to search dashboards" })
+  }
+})
+
+app.get("/api/collaboration/dashboards/:id/export", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.userId
+    const exportData = collaborationManager.exportDashboard(id, userId)
+    res.json(exportData)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to export dashboard" })
+  }
+})
+
+app.post("/api/collaboration/import", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const userId = req.user.userId
+    const dashboard = collaborationManager.importDashboard(userId, req.body)
+    res.status(201).json(dashboard)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to import dashboard" })
+  }
+})
+
+// Reporting and Analytics API endpoints
+app.get("/api/reports/templates", (req, res) => {
+  try {
+    const templates = Array.from(reportingEngine.reportTemplates.entries()).map(([id, template]) => ({
+      id,
+      ...template
+    }))
+    res.json(templates)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get report templates" })
+  }
+})
+
+app.post("/api/reports/generate", createAuthMiddleware(userManagement), async (req, res) => {
+  try {
+    const { templateId, parameters } = req.body
+    const metricsData = metricsCollector.getAllData()
+    
+    // Add user ID to parameters
+    parameters.userId = req.user.userId
+    
+    const report = await reportingEngine.generateReport(templateId, parameters, metricsData)
+    res.json(report)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to generate report" })
+  }
+})
+
+app.get("/api/reports/:id/download", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const report = reportingEngine.reportHistory.get(id)
+    
+    if (!report) {
+      return res.status(404).json({ error: "Report not found" })
+    }
+
+    // Check permissions
+    if (report.generatedBy !== req.user.userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: "Access denied" })
+    }
+
+    // Set appropriate headers based on format
+    const contentType = {
+      'pdf': 'application/pdf',
+      'excel': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'csv': 'text/csv',
+      'json': 'application/json'
+    }[report.format] || 'application/octet-stream'
+
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Content-Disposition', `attachment; filename="report-${id}.${report.format}"`)
+    
+    if (typeof report.data === 'string') {
+      res.send(report.data)
+    } else {
+      res.json(report.data)
+    }
+  } catch (e) {
+    res.status(500).json({ error: "Failed to download report" })
+  }
+})
+
+app.get("/api/reports/history", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const filters = {
+      userId: req.user.role === 'admin' ? undefined : req.user.userId,
+      templateId: req.query.templateId,
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo
+    }
+    
+    const history = reportingEngine.getReportHistory(filters)
+    res.json(history)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get report history" })
+  }
+})
+
+app.post("/api/reports/schedule", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { templateId, parameters, schedule } = req.body
+    parameters.userId = req.user.userId
+    
+    const scheduledReport = reportingEngine.scheduleReport(templateId, parameters, schedule)
+    res.status(201).json(scheduledReport)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to schedule report" })
+  }
+})
+
+app.get("/api/reports/scheduled", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const scheduledReports = reportingEngine.getScheduledReports()
+    
+    // Filter by user if not admin
+    const filtered = req.user.role === 'admin' 
+      ? scheduledReports 
+      : scheduledReports.filter(report => report.parameters.userId === req.user.userId)
+    
+    res.json(filtered)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get scheduled reports" })
+  }
+})
+
+app.put("/api/reports/schedule/:id", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const updated = reportingEngine.updateScheduledReport(id, req.body)
+    res.json(updated)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to update scheduled report" })
+  }
+})
+
+app.delete("/api/reports/schedule/:id", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { id } = req.params
+    const deleted = reportingEngine.deleteScheduledReport(id)
+    res.json({ success: deleted })
+  } catch (e) {
+    res.status(500).json({ error: "Failed to delete scheduled report" })
+  }
+})
+
+app.get("/api/analytics/dashboard", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const { timeRange = '24h' } = req.query
+    const data = metricsCollector.getAllData()
+    
+    // Generate analytics summary
+    const analytics = {
+      summary: {
+        totalRequests: data.stats.totalRequests,
+        errorRate: data.stats.errorRate,
+        avgResponseTime: data.stats.avgResponseTime,
+        uptime: data.stats.uptime,
+        activeAlerts: data.alerts?.filter(a => a.status === 'active').length || 0
+      },
+      trends: {
+        requestsTrend: calculateTrend(data.endpoints, 'requests'),
+        errorRateTrend: calculateTrend(data.endpoints, 'errors'),
+        responseTimeTrend: calculateTrend(data.endpoints, 'responseTime')
+      },
+      topEndpoints: data.endpoints?.sort((a, b) => b.requests - a.requests).slice(0, 10) || [],
+      recentAlerts: data.alerts?.slice(0, 5) || [],
+      systemHealth: {
+        cpu: data.resourceMetrics?.cpu?.current || 0,
+        memory: data.resourceMetrics?.memory?.usedPercentage || 0,
+        disk: 75 // Placeholder
+      }
+    }
+    
+    res.json(analytics)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get analytics data" })
+  }
+})
+
+// Helper function for trend calculation
+function calculateTrend(endpoints, metric) {
+  if (!endpoints || endpoints.length === 0) return { direction: 'stable', change: 0 }
+  
+  const current = endpoints.reduce((sum, ep) => sum + (ep[metric] || 0), 0)
+  const previous = current * 0.9 // Simplified - would use historical data
+  const change = ((current - previous) / previous) * 100
+  
+  return {
+    direction: change > 5 ? 'increasing' : change < -5 ? 'decreasing' : 'stable',
+    change: Math.round(change * 100) / 100
+  }
+}
+
+// Integration Marketplace API endpoints
+app.get("/api/integrations", (req, res) => {
+  try {
+    const { category, region, search } = req.query
+    const filters = {}
+    if (category) filters.category = category
+    if (region) filters.region = region
+    if (search) filters.search = search
+    
+    const integrations = integrationMarketplace.getAvailableIntegrations(filters)
+    res.json(integrations)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get integrations" })
+  }
+})
+
+app.get("/api/integrations/:id", (req, res) => {
+  try {
+    const { id } = req.params
+    const integration = integrationMarketplace.getIntegration(id)
+    if (!integration) {
+      return res.status(404).json({ error: "Integration not found" })
+    }
+    res.json(integration)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get integration" })
+  }
+})
+
+app.get("/api/integrations/categories", (req, res) => {
+  try {
+    const categories = integrationMarketplace.getCategories()
+    res.json(categories)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get categories" })
+  }
+})
+
+app.get("/api/integrations/popular", (req, res) => {
+  try {
+    const { limit = 10 } = req.query
+    const popular = integrationMarketplace.getPopularIntegrations(parseInt(limit))
+    res.json(popular)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get popular integrations" })
+  }
+})
+
+app.post("/api/integrations/test", createAuthMiddleware(userManagement), async (req, res) => {
+  try {
+    const { integrationId, config } = req.body
+    const testResult = await integrationMarketplace.testIntegration(integrationId, config)
+    res.json(testResult)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to test integration" })
+  }
+})
+
+app.post("/api/user/integrations", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const userId = req.user.userId
+    const { integrationId, config } = req.body
+    const userIntegration = integrationMarketplace.installIntegration(userId, integrationId, config)
+    res.status(201).json(userIntegration)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to install integration" })
+  }
+})
+
+app.get("/api/user/integrations", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const userId = req.user.userId
+    const userIntegrations = integrationMarketplace.getUserIntegrations(userId)
+    res.json(userIntegrations)
+  } catch (e) {
+    res.status(500).json({ error: "Failed to get user integrations" })
+  }
+})
+
+app.put("/api/user/integrations/:id", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const userId = req.user.userId
+    const { id } = req.params
+    const updated = integrationMarketplace.updateIntegration(userId, id, req.body)
+    res.json(updated)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to update integration" })
+  }
+})
+
+app.delete("/api/user/integrations/:id", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const userId = req.user.userId
+    const { id } = req.params
+    const removed = integrationMarketplace.uninstallIntegration(userId, id)
+    res.json(removed)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to uninstall integration" })
+  }
+})
+
+app.get("/api/user/integrations/:id/metrics", createAuthMiddleware(userManagement), (req, res) => {
+  try {
+    const userId = req.user.userId
+    const { id } = req.params
+    const metrics = integrationMarketplace.getIntegrationMetrics(userId, id)
+    res.json(metrics)
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to get integration metrics" })
+  }
+})
+
 // Dashboard data endpoint - returns all data in a single request
-app.get("/api/dashboard-data", (req, res) => {
+app.get("/api/dashboard-data", createAuthMiddleware(userManagement), requirePermission(PERMISSIONS.DASHBOARD_VIEW), (req, res) => {
   res.json(metricsCollector.getAllData())
 })
 
 // Alerts (recent)
-app.get("/api/alerts", (req, res) => {
+app.get("/api/alerts", createAuthMiddleware(userManagement), requirePermission(PERMISSIONS.ALERTS_VIEW), (req, res) => {
   try {
     const { alerts } = metricsCollector.getAllData()
     res.json(alerts || [])

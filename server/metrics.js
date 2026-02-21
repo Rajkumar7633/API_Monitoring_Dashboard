@@ -1,6 +1,7 @@
 // In-memory storage for metrics
 const { eventBus } = require("./event-bus")
 const { randomUUID } = require("crypto")
+const { AnomalyDetector } = require("./anomaly-detection")
 const metrics = {
   stats: {
     totalRequests: 0,
@@ -44,6 +45,7 @@ const metrics = {
     slowQueries: [],
   },
   serviceHealth: [],
+  anomalyStats: null, // Will be populated by anomaly detector
 }
 
 // Map endpoint => { traceId, ts } from last error snapshot to help correlate alerts to snapshots
@@ -96,6 +98,9 @@ defaultServices.forEach((service, index) => {
 })
 
 function createMetricsCollector() {
+  // Initialize anomaly detector
+  const anomalyDetector = new AnomalyDetector()
+
   // Record API request
   const recordApiRequest = (endpoint, duration, status) => {
     // Update total requests
@@ -146,6 +151,26 @@ function createMetricsCollector() {
     })
 
     metrics.stats.avgResponseTime = responseTimePoints > 0 ? Math.round(totalResponseTime / responseTimePoints) : 0
+
+    // AI-Powered Anomaly Detection
+    const errorRate = totalRequests > 0 ? (totalErrors / totalRequests) * 100 : 0
+    anomalyDetector.addMetricData(endpoint, 'responseTime', duration)
+    anomalyDetector.addMetricData(endpoint, 'errorRate', errorRate)
+    anomalyDetector.addMetricData(endpoint, 'throughput', endpointData.requests)
+
+    // Check for anomalies
+    const responseTimeAnomaly = anomalyDetector.detectAnomaly(endpoint, 'responseTime', duration)
+    const errorRateAnomaly = anomalyDetector.detectAnomaly(endpoint, 'errorRate', errorRate)
+    
+    if (responseTimeAnomaly.isAnomalous) {
+      addAlert("error", `🤖 AI Alert: Anomalous response time on ${endpoint}`, "AI Anomaly Detector", 
+        `Response time: ${duration}ms (Confidence: ${responseTimeAnomaly.confidence}%) - ${responseTimeAnomaly.reason}`)
+    }
+    
+    if (errorRateAnomaly.isAnomalous) {
+      addAlert("error", `🤖 AI Alert: Anomalous error rate on ${endpoint}`, "AI Anomaly Detector", 
+        `Error rate: ${errorRate.toFixed(2)}% (Confidence: ${errorRateAnomaly.confidence}%) - ${errorRateAnomaly.reason}`)
+    }
 
     // Add log entry if error
     if (status >= 400) {
@@ -396,9 +421,15 @@ function createMetricsCollector() {
   const getAllData = () => {
     // Update resource metrics before returning
     updateResourceMetrics()
+    
+    // Update anomaly stats
+    metrics.anomalyStats = anomalyDetector.getAnomalyStats()
 
     return metrics
   }
+
+  // Get anomaly detection methods
+  const getAnomalyDetector = () => anomalyDetector
 
   // Start periodic updates
   setInterval(updateResourceMetrics, 5000) // Update every 5 seconds
@@ -412,6 +443,7 @@ function createMetricsCollector() {
     addLog,
     updateResourceMetrics,
     getAllData,
+    getAnomalyDetector,
   }
 }
 
