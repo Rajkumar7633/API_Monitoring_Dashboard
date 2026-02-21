@@ -1,5 +1,11 @@
 // Indian Market-Specific Features
-const geoip = require('geoip-lite')
+let geoip;
+try {
+  geoip = require('geoip-lite');
+} catch (error) {
+  console.warn('geoip-lite module not available. Indian region detection will use fallback logic.');
+  geoip = null;
+}
 
 class IndianFeatures {
   constructor() {
@@ -26,6 +32,15 @@ class IndianFeatures {
 
   // Detect if request is from India
   detectIndianRegion(ipAddress) {
+    if (!geoip) {
+      // Fallback logic when geoip-lite is not available
+      return { 
+        isIndia: false, 
+        fallback: true,
+        message: 'GeoIP module not available - using fallback detection'
+      }
+    }
+    
     const geo = geoip.lookup(ipAddress)
     if (!geo || geo.country !== 'IN') {
       return { isIndia: false }
@@ -137,9 +152,14 @@ class IndianFeatures {
     }
     
     // Check IP ranges for Indian ISPs (simplified)
-    const geo = geoip.lookup(ipAddress)
-    if (geo && geo.country === 'IN') {
-      return { name: 'Unknown Indian ISP', type: 'ISP', confidence: 'low' }
+    if (geoip) {
+      const geo = geoip.lookup(ipAddress)
+      if (geo && geo.country === 'IN') {
+        return { name: 'Unknown Indian ISP', type: 'ISP', confidence: 'low' }
+      }
+    } else {
+      // Fallback when geoip-lite is not available
+      return { name: 'Unknown ISP', type: 'ISP', confidence: 'very_low', fallback: true }
     }
     
     return null
