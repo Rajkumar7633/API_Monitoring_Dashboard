@@ -39,7 +39,15 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<SocketContextType["data"]>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
 
-  const defaultData = (): SocketContextType["data"] => ({
+  type DashboardData = NonNullable<SocketContextType["data"]>
+
+  const getApiBase = () => {
+    const envBase = process.env.NEXT_PUBLIC_API_URL
+    if (envBase && envBase.trim().length > 0) return envBase
+    return ""
+  }
+
+  const defaultData = (): DashboardData => ({
     stats: { totalRequests: 0, requestsChange: 0, errorRate: 0, errorRateChange: 0, avgResponseTime: 0, responseTimeChange: 0, uptime: 0 },
     endpoints: [],
     logs: [],
@@ -53,7 +61,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const connectToServer = async () => {
     try {
       // Try to connect to the server
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/health`, {
+      const base = getApiBase()
+      const response = await fetch(`${base}/api/health`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -83,7 +92,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       eventSourceRef.current.close()
     }
 
-    const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+    const base = getApiBase()
     const es = new EventSource(`${base}/api/stream`)
     eventSourceRef.current = es
 
@@ -95,8 +104,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       try {
         const payload = JSON.parse((evt as MessageEvent).data)
         setData((prev) => ({
-          ...(prev || defaultData()),
-          stats: payload.stats || prev?.stats || defaultData()!.stats,
+          ...(prev ?? defaultData()),
+          stats: payload?.stats || (prev ?? defaultData()).stats,
         }))
       } catch {}
     })
@@ -115,8 +124,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         const ep = payload.endpoint
         if (!ep || !ep.name) return
         setData((prev) => {
-          const base = prev || defaultData()
-          const list = [...(base.endpoints || [])]
+          const base = prev ?? defaultData()
+          const list = [...base.endpoints]
           const idx = list.findIndex((e: any) => e.name === ep.name)
           if (idx >= 0) list[idx] = { ...list[idx], ...ep }
           else list.push(ep)
@@ -129,8 +138,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       try {
         const payload = JSON.parse((evt as MessageEvent).data)
         setData((prev) => ({
-          ...(prev || defaultData()),
-          databaseMetrics: payload.databaseMetrics || prev?.databaseMetrics || defaultData()!.databaseMetrics,
+          ...(prev ?? defaultData()),
+          databaseMetrics: payload?.databaseMetrics || (prev ?? defaultData()).databaseMetrics,
         }))
       } catch {}
     })
@@ -139,8 +148,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       try {
         const payload = JSON.parse((evt as MessageEvent).data)
         setData((prev) => ({
-          ...(prev || defaultData()),
-          resourceMetrics: payload.resourceMetrics || prev?.resourceMetrics || defaultData()!.resourceMetrics,
+          ...(prev ?? defaultData()),
+          resourceMetrics: payload?.resourceMetrics || (prev ?? defaultData()).resourceMetrics,
         }))
       } catch {}
     })
@@ -149,8 +158,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       try {
         const incoming = JSON.parse((evt as MessageEvent).data)
         setData((prev) => {
-          const base = prev || defaultData()
-          const list = [...(base.alerts || [])]
+          const base = prev ?? defaultData()
+          const list = [...base.alerts]
           const idx = list.findIndex((a: any) => String(a.id) === String(incoming.id))
           if (idx >= 0) list[idx] = { ...list[idx], ...incoming }
           else list.unshift(incoming)
@@ -163,8 +172,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       try {
         const incoming = JSON.parse((evt as MessageEvent).data)
         setData((prev) => {
-          const base = prev || defaultData()
-          const list = [...(base.logs || [])]
+          const base = prev ?? defaultData()
+          const list = [...base.logs]
           const idx = list.findIndex((l: any) => String(l.id) === String(incoming.id))
           if (idx >= 0) list[idx] = { ...list[idx], ...incoming }
           else list.unshift(incoming)
@@ -178,9 +187,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         const payload = JSON.parse((evt as MessageEvent).data)
         const svc = payload.service
         setData((prev) => {
-          const base = prev || defaultData()
-          const list = [...(base.serviceHealth || [])]
-          const idx = list.findIndex((s: any) => s.name === svc.name)
+          const base = prev ?? defaultData()
+          const list = [...base.serviceHealth]
+          const idx = list.findIndex((s: any) => s.name === svc?.name)
           if (idx >= 0) list[idx] = svc
           else list.push(svc)
           return { ...base, serviceHealth: list }
@@ -202,7 +211,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const fetchServerData = async () => {
     try {
       // Bootstrap snapshot; realtime updates come via SSE
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/api/dashboard-data`)
+      const base = getApiBase()
+      const response = await fetch(`${base}/api/dashboard-data`)
 
       if (response.ok) {
         const serverData = await response.json()

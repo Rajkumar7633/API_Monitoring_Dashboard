@@ -8,13 +8,13 @@ export async function GET(request: Request) {
   const timeRange = searchParams.get("timeRange") || "24h"
 
   const allLogs: ApiLog[] = [
-    { id: 1, endpoint: "/api/users", status: 500, message: "Internal Server Error", timestamp: "2023-06-15T14:32:21" },
-    { id: 2, endpoint: "/api/auth", status: 401, message: "Unauthorized Access", timestamp: "2023-06-15T14:28:10" },
-    { id: 3, endpoint: "/api/products", status: 404, message: "Resource Not Found", timestamp: "2023-06-15T14:15:45" },
-    { id: 4, endpoint: "/api/auth", status: 429, message: "Too Many Requests", timestamp: "2023-06-15T14:10:33" },
-    { id: 5, endpoint: "/api/orders", status: 503, message: "Service Unavailable", timestamp: "2023-06-15T13:58:22" },
-    { id: 6, endpoint: "/api/payments", status: 400, message: "Bad Request", timestamp: "2023-06-15T13:45:11" },
-    { id: 7, endpoint: "/api/users", status: 422, message: "Unprocessable Entity", timestamp: "2023-06-15T13:30:05" },
+    { id: 1, endpoint: "/api/users", status: 500, message: "Internal Server Error", timestamp: "2023-06-15T14:32:21", duration: 842 },
+    { id: 2, endpoint: "/api/auth", status: 401, message: "Unauthorized Access", timestamp: "2023-06-15T14:28:10", duration: 120 },
+    { id: 3, endpoint: "/api/products", status: 404, message: "Resource Not Found", timestamp: "2023-06-15T14:15:45", duration: 76 },
+    { id: 4, endpoint: "/api/auth", status: 429, message: "Too Many Requests", timestamp: "2023-06-15T14:10:33", duration: 210 },
+    { id: 5, endpoint: "/api/orders", status: 503, message: "Service Unavailable", timestamp: "2023-06-15T13:58:22", duration: 1560 },
+    { id: 6, endpoint: "/api/payments", status: 400, message: "Bad Request", timestamp: "2023-06-15T13:45:11", duration: 92 },
+    { id: 7, endpoint: "/api/users", status: 422, message: "Unprocessable Entity", timestamp: "2023-06-15T13:30:05", duration: 140 },
   ]
 
   // Filter logs by endpoint if specified
