@@ -13,35 +13,71 @@ export const dynamic = "force-dynamic"
 
 let cachedBackendToken: string | null = null
 let cachedBackendTokenAtMs = 0
+let lastBackendAuthError: any = null
 
 async function getBackendToken(base: string) {
   const explicit = process.env.BACKEND_TOKEN
-  if (explicit && explicit.trim().length > 0) return explicit.trim()
+  if (explicit && explicit.trim().length > 0) {
+    lastBackendAuthError = null
+    return explicit.trim()
+  }
 
   const username = process.env.BACKEND_USERNAME
   const password = process.env.BACKEND_PASSWORD
-  if (!username || !password) return null
+  if (!username || !password) {
+    lastBackendAuthError = {
+      reason: "missing_credentials",
+      hasUsername: Boolean(username),
+      hasPassword: Boolean(password),
+    }
+    return null
+  }
 
   const now = Date.now()
   if (cachedBackendToken && now - cachedBackendTokenAtMs < 20 * 60 * 1000) {
     return cachedBackendToken
   }
 
-  const res = await fetch(`${base}/api/auth/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ username, password }),
-    cache: "no-store",
-  })
+  let res: Response
+  try {
+    res = await fetch(`${base}/api/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username, password }),
+      cache: "no-store",
+    })
+  } catch (e: any) {
+    lastBackendAuthError = {
+      reason: "login_request_failed",
+      message: String(e?.message || e),
+    }
+    return null
+  }
 
-  if (!res.ok) return null
+  if (!res.ok) {
+    const text = await res.text().catch(() => "")
+    lastBackendAuthError = {
+      reason: "login_failed",
+      status: res.status,
+      bodySnippet: text.slice(0, 500),
+    }
+    return null
+  }
 
   const json = await res.json().catch(() => null)
   const token = json?.token
-  if (typeof token !== "string" || token.length === 0) return null
+  if (typeof token !== "string" || token.length === 0) {
+    lastBackendAuthError = {
+      reason: "login_missing_token",
+      status: res.status,
+      bodySnippet: JSON.stringify(json)?.slice(0, 500),
+    }
+    return null
+  }
 
   cachedBackendToken = token
   cachedBackendTokenAtMs = now
+  lastBackendAuthError = null
   return token
 }
 
@@ -59,6 +95,7 @@ async function proxyIfConfigured(pathnameWithQuery: string) {
         error: "backend_auth_unavailable",
         message:
           "BACKEND_URL is set but no backend auth token could be obtained. Set BACKEND_TOKEN, or set BACKEND_USERNAME and BACKEND_PASSWORD in Vercel Production and redeploy.",
+        details: lastBackendAuthError,
       },
       { status: 500 },
     )
