@@ -89,17 +89,7 @@ async function proxyIfConfigured(pathnameWithQuery: string) {
   const target = `${base}${pathnameWithQuery.startsWith("/") ? "" : "/"}${pathnameWithQuery}`
 
   const token = await getBackendToken(base)
-  if (!token) {
-    return NextResponse.json(
-      {
-        error: "backend_auth_unavailable",
-        message:
-          "BACKEND_URL is set but no backend auth token could be obtained. Set BACKEND_TOKEN, or set BACKEND_USERNAME and BACKEND_PASSWORD in Vercel Production and redeploy.",
-        details: lastBackendAuthError,
-      },
-      { status: 500 },
-    )
-  }
+  if (!token) return null
   const headers: Record<string, string> = {}
   if (token) headers.authorization = `Bearer ${token}`
 
@@ -293,6 +283,7 @@ export async function GET(request: Request) {
     meta: {
       timeRange,
       timestamp: new Date().toISOString(),
+      backendAuthError: process.env.BACKEND_URL ? lastBackendAuthError : null,
     },
   })
 }

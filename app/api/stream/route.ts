@@ -53,28 +53,34 @@ export async function GET(request: Request) {
   if (backend && backend.trim().length > 0) {
     const base = normalizeBase(backend)
     const token = await getBackendToken(base)
-    const headers: Record<string, string> = {}
-    if (token) headers.authorization = `Bearer ${token}`
+    if (!token) {
+      // fall back to local SSE
+    } else {
+      const headers: Record<string, string> = {}
+      if (token) headers.authorization = `Bearer ${token}`
 
-    const target = `${base}/api/stream`
-    let res = await fetch(target, { cache: "no-store", headers })
-    if (res.status === 401 && token && !process.env.BACKEND_TOKEN) {
-      cachedBackendToken = null
-      cachedBackendTokenAtMs = 0
-      const refreshed = await getBackendToken(base)
-      const retryHeaders: Record<string, string> = {}
-      if (refreshed) retryHeaders.authorization = `Bearer ${refreshed}`
-      res = await fetch(target, { cache: "no-store", headers: retryHeaders })
+      const target = `${base}/api/stream`
+      let res = await fetch(target, { cache: "no-store", headers })
+      if (res.status === 401 && token && !process.env.BACKEND_TOKEN) {
+        cachedBackendToken = null
+        cachedBackendTokenAtMs = 0
+        const refreshed = await getBackendToken(base)
+        const retryHeaders: Record<string, string> = {}
+        if (refreshed) retryHeaders.authorization = `Bearer ${refreshed}`
+        res = await fetch(target, { cache: "no-store", headers: retryHeaders })
+      }
+
+      if (res.status !== 401 && res.status !== 403) {
+        return new Response(res.body, {
+          status: res.status,
+          headers: {
+            "Content-Type": res.headers.get("content-type") || "text/event-stream",
+            "Cache-Control": "no-cache, no-transform",
+            Connection: "keep-alive",
+          },
+        })
+      }
     }
-
-    return new Response(res.body, {
-      status: res.status,
-      headers: {
-        "Content-Type": res.headers.get("content-type") || "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
-      },
-    })
   }
 
   const origin = new URL(request.url).origin
