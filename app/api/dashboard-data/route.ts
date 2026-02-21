@@ -11,6 +11,40 @@ import type {
 
 export const dynamic = "force-dynamic"
 
+let cachedBackendToken: string | null = null
+let cachedBackendTokenAtMs = 0
+
+async function getBackendToken(base: string) {
+  const explicit = process.env.BACKEND_TOKEN
+  if (explicit && explicit.trim().length > 0) return explicit.trim()
+
+  const username = process.env.BACKEND_USERNAME
+  const password = process.env.BACKEND_PASSWORD
+  if (!username || !password) return null
+
+  const now = Date.now()
+  if (cachedBackendToken && now - cachedBackendTokenAtMs < 20 * 60 * 1000) {
+    return cachedBackendToken
+  }
+
+  const res = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password }),
+    cache: "no-store",
+  })
+
+  if (!res.ok) return null
+
+  const json = await res.json().catch(() => null)
+  const token = json?.token
+  if (typeof token !== "string" || token.length === 0) return null
+
+  cachedBackendToken = token
+  cachedBackendTokenAtMs = now
+  return token
+}
+
 async function proxyIfConfigured(pathnameWithQuery: string) {
   const backend = process.env.BACKEND_URL
   if (!backend || backend.trim().length === 0) return null
@@ -18,7 +52,20 @@ async function proxyIfConfigured(pathnameWithQuery: string) {
   const base = backend.replace(/\/+$/g, "")
   const target = `${base}${pathnameWithQuery.startsWith("/") ? "" : "/"}${pathnameWithQuery}`
 
-  const res = await fetch(target, { cache: "no-store" })
+  const token = await getBackendToken(base)
+  const headers: Record<string, string> = {}
+  if (token) headers.authorization = `Bearer ${token}`
+
+  let res = await fetch(target, { cache: "no-store", headers })
+  if (res.status === 401 && token && !process.env.BACKEND_TOKEN) {
+    cachedBackendToken = null
+    cachedBackendTokenAtMs = 0
+    const refreshed = await getBackendToken(base)
+    const retryHeaders: Record<string, string> = {}
+    if (refreshed) retryHeaders.authorization = `Bearer ${refreshed}`
+    res = await fetch(target, { cache: "no-store", headers: retryHeaders })
+  }
+
   const body = await res.text()
 
   return new Response(body, {
