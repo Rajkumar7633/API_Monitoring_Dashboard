@@ -11,6 +11,25 @@ import type {
 
 export const dynamic = "force-dynamic"
 
+async function proxyIfConfigured(pathnameWithQuery: string) {
+  const backend = process.env.BACKEND_URL
+  if (!backend || backend.trim().length === 0) return null
+
+  const base = backend.replace(/\/+$/g, "")
+  const target = `${base}${pathnameWithQuery.startsWith("/") ? "" : "/"}${pathnameWithQuery}`
+
+  const res = await fetch(target, { cache: "no-store" })
+  const body = await res.text()
+
+  return new Response(body, {
+    status: res.status,
+    headers: {
+      "content-type": res.headers.get("content-type") || "application/json",
+      "cache-control": "no-store",
+    },
+  })
+}
+
 function generateTimeSeriesData(points: number) {
   const data: { time: string; value: number }[] = []
   const baseValue = 100 + Math.floor(Math.random() * 50)
@@ -25,6 +44,9 @@ function generateTimeSeriesData(points: number) {
 }
 
 export async function GET(request: Request) {
+  const proxied = await proxyIfConfigured(new URL(request.url).pathname + new URL(request.url).search)
+  if (proxied) return proxied
+
   const { searchParams } = new URL(request.url)
   const timeRange = searchParams.get("timeRange") || "24h"
 

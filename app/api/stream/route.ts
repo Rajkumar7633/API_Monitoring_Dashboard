@@ -1,5 +1,9 @@
 export const dynamic = "force-dynamic"
 
+function normalizeBase(value: string) {
+  return value.replace(/\/+$/g, "")
+}
+
 function sseEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
@@ -12,6 +16,20 @@ async function getDashboardSnapshot(origin: string) {
 }
 
 export async function GET(request: Request) {
+  const backend = process.env.BACKEND_URL
+  if (backend && backend.trim().length > 0) {
+    const target = `${normalizeBase(backend)}/api/stream`
+    const res = await fetch(target, { cache: "no-store" })
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": res.headers.get("content-type") || "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      },
+    })
+  }
+
   const origin = new URL(request.url).origin
 
   const stream = new ReadableStream({
