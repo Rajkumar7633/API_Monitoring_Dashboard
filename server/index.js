@@ -906,7 +906,7 @@ app.get("/api/reports/:id/download", createAuthMiddleware(userManagement), (req,
     res.setHeader('Content-Type', contentType)
     res.setHeader('Content-Disposition', `attachment; filename="report-${id}.${report.format}"`)
     
-    if (typeof report.data === 'string') {
+    if (typeof report.data === 'string' || Buffer.isBuffer(report.data)) {
       res.send(report.data)
     } else {
       res.json(report.data)

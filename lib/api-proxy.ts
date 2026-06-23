@@ -126,11 +126,12 @@ export async function proxyRequest(request: Request, pathAndQuery: string) {
       cache: "no-store",
     })
 
-    const bodyText = await res.text()
-    return new Response(bodyText, {
+    const bodyBuffer = await res.arrayBuffer()
+    return new Response(bodyBuffer, {
       status: res.status,
       headers: {
         "content-type": res.headers.get("content-type") || "application/json",
+        "content-disposition": res.headers.get("content-disposition") || "",
         "cache-control": "no-store",
       },
     })

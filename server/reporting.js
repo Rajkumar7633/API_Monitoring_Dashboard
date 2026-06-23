@@ -382,32 +382,13 @@ class ReportingEngine {
 
   // Create Excel report (simplified - would use library like xlsx in production)
   createExcelReport(data, template) {
-    return {
-      type: 'excel',
-      worksheets: [
-        {
-          name: 'Summary',
-          data: this.createSummaryWorksheet(data)
-        },
-        {
-          name: 'Details',
-          data: this.createDetailsWorksheet(data)
-        }
-      ]
-    }
+    return this.createCSVReport(data, template)
   }
 
   // Create PDF report (simplified - would use library like puppeteer in production)
   createPDFReport(data, template) {
-    return {
-      type: 'pdf',
-      content: this.generatePDFContent(data, template),
-      metadata: {
-        title: template.name,
-        author: 'API Monitoring Dashboard',
-        subject: 'System Performance Report'
-      }
-    }
+    const sections = this.generatePDFContent(data, template).sections
+    return generateSimplePDF(template.name, sections)
   }
 
   // Schedule recurring report
@@ -694,6 +675,70 @@ class ReportingEngine {
       ]
     }
   }
+}
+
+function generateSimplePDF(title, sections) {
+  let textLines = [];
+  textLines.push(`API Observability Dashboard - ${title}`);
+  textLines.push(`Generated: ${new Date().toLocaleString()}`);
+  textLines.push("====================================================");
+  textLines.push("");
+
+  sections.forEach(sec => {
+    textLines.push(sec.title.toUpperCase());
+    textLines.push("----------------------------------------------------");
+    if (typeof sec.content === 'string') {
+      textLines.push(sec.content);
+    } else if (typeof sec.content === 'object' && sec.content !== null) {
+      Object.entries(sec.content).forEach(([k, v]) => {
+        textLines.push(`  ${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+      });
+    }
+    textLines.push("");
+  });
+
+  const textContent = textLines.join("\n");
+
+  let streamLines = [];
+  streamLines.push("BT");
+  streamLines.push("/F1 10 Tf");
+  streamLines.push("12 TL");
+  streamLines.push("50 780 Td");
+  
+  const rawLines = textContent.split("\n");
+  rawLines.forEach(line => {
+    const escaped = line.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    streamLines.push(`(${escaped}) Tj T*`);
+  });
+  streamLines.push("ET");
+
+  const streamContent = streamLines.join("\n");
+
+  const obj1 = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`;
+  const obj2 = `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`;
+  const obj3 = `3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /MediaBox [0 0 595 842] /Contents 4 0 R >>\nendobj\n`;
+  
+  const streamLength = Buffer.byteLength(streamContent);
+  const obj4 = `4 0 obj\n<< /Length ${streamLength} >>\nstream\n${streamContent}\nendstream\nendobj\n`;
+
+  const pdfHeader = `%PDF-1.4\n`;
+  
+  const offset1 = Buffer.byteLength(pdfHeader);
+  const offset2 = offset1 + Buffer.byteLength(obj1);
+  const offset3 = offset2 + Buffer.byteLength(obj2);
+  const offset4 = offset3 + Buffer.byteLength(obj3);
+  const startXref = offset4 + Buffer.byteLength(obj4);
+
+  const xref = `xref\n0 5\n0000000000 65535 f \n${String(offset1).padStart(10, '0')} 00000 n \n${String(offset2).padStart(10, '0')} 00000 n \n${String(offset3).padStart(10, '0')} 00000 n \n${String(offset4).padStart(10, '0')} 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF\n`;
+
+  return Buffer.concat([
+    Buffer.from(pdfHeader),
+    Buffer.from(obj1),
+    Buffer.from(obj2),
+    Buffer.from(obj3),
+    Buffer.from(obj4),
+    Buffer.from(xref)
+  ]);
 }
 
 module.exports = { ReportingEngine }
