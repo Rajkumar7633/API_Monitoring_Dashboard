@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import type { ResourceMetrics } from "@/types/api-types"
 
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   const cpuCurrent = 60 + Math.floor(Math.random() * 20)
   const memoryUsed = 12 + (Math.random() * 1.5 - 0.75)

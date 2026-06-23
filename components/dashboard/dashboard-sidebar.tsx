@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, AlertTriangle, Database, Home, Layers, Settings, X } from "lucide-react"
+import { Activity, AlertTriangle, Database, Home, Layers, Settings, X, Flame, Map, Cpu, FileText, LayoutGrid } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface DashboardSidebarProps {
@@ -11,6 +11,19 @@ interface DashboardSidebarProps {
 
 export function DashboardSidebar({ open, setOpen }: DashboardSidebarProps) {
   const pathname = usePathname()
+
+  const navItems = [
+    { href: "/", label: "Dashboard", icon: Home },
+    { href: "/services", label: "Services", icon: Layers },
+    { href: "/databases", label: "Databases", icon: Database },
+    { href: "/tracing", label: "Tracing", icon: Flame },
+    { href: "/indian-insights", label: "Indian Insights", icon: Map },
+    { href: "/ml-analytics", label: "ML Analytics", icon: Cpu },
+    { href: "/reports", label: "Reports", icon: FileText },
+    { href: "/builder", label: "Builder", icon: LayoutGrid },
+    { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+    { href: "/settings", label: "Settings", icon: Settings },
+  ]
 
   return (
     <div
@@ -33,48 +46,28 @@ export function DashboardSidebar({ open, setOpen }: DashboardSidebarProps) {
       </div>
       <nav className="flex-1 overflow-auto py-4 px-2">
         <div className="space-y-1">
-          <Button variant={pathname === "/" ? "default" : "ghost"} className="w-full justify-start gap-2" asChild>
-            <Link href="/" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
-              <Home className="h-4 w-4" />
-              Dashboard
-            </Link>
-          </Button>
-          <Button
-            variant={pathname === "/services" ? "default" : "ghost"}
-            className="w-full justify-start gap-2"
-            asChild
-          >
-            <Link href="/services" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
-              <Layers className="h-4 w-4" />
-              Services
-            </Link>
-          </Button>
-          <Button
-            variant={pathname === "/databases" ? "default" : "ghost"}
-            className="w-full justify-start gap-2"
-            asChild
-          >
-            <Link href="/databases" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
-              <Database className="h-4 w-4" />
-              Databases
-            </Link>
-          </Button>
-          <Button variant={pathname === "/alerts" ? "default" : "ghost"} className="w-full justify-start gap-2" asChild>
-            <Link href="/alerts" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
-              <AlertTriangle className="h-4 w-4" />
-              Alerts
-            </Link>
-          </Button>
-          <Button
-            variant={pathname === "/settings" ? "default" : "ghost"}
-            className="w-full justify-start gap-2"
-            asChild
-          >
-            <Link href="/settings" onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) setOpen(false) }}>
-              <Settings className="h-4 w-4" />
-              Settings
-            </Link>
-          </Button>
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const active = pathname === item.href
+            return (
+              <Button
+                key={item.href}
+                variant={active ? "default" : "ghost"}
+                className="w-full justify-start gap-2"
+                asChild
+              >
+                <Link
+                  href={item.href}
+                  onClick={() => {
+                    if (typeof window !== "undefined" && window.innerWidth < 768) setOpen(false)
+                  }}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              </Button>
+            )
+          })}
         </div>
       </nav>
     </div>

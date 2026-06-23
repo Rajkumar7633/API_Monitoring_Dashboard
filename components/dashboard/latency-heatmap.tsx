@@ -33,7 +33,7 @@ export function LatencyHeatmap({ endpoint }: { endpoint: string }) {
   const [hours, setHours] = useState(6);
   const [stat, setStat] = useState<"p95" | "p99">("p95");
 
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const base = process.env.NEXT_PUBLIC_API_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const ep = endpoint && endpoint !== "all" ? endpoint : "/api/users"; // default representative endpoint
 
   useEffect(() => {

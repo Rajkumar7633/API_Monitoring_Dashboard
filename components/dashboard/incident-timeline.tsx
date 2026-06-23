@@ -38,7 +38,7 @@ function timeStr(ts: number) {
 }
 
 export function IncidentTimeline({ filter }: { filter?: (item: IncidentAlert | IncidentCheck) => boolean }) {
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const base = process.env.NEXT_PUBLIC_API_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const [hours, setHours] = useState(24);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);

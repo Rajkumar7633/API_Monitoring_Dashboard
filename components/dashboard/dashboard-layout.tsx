@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Activity,
   AlertTriangle,
@@ -16,6 +16,11 @@ import {
   Search,
   Settings,
   X,
+  Flame,
+  Map,
+  Cpu,
+  FileText,
+  LayoutGrid,
 } from "lucide-react"
 import { format } from "date-fns"
 import Link from "next/link"
@@ -35,6 +40,61 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [date, setDate] = useState<Date | undefined>(new Date())
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const pathname = usePathname()
+
+  const [dataSource, setDataSource] = useState<"live" | "mock">("live")
+  const [loadingSource, setLoadingSource] = useState(true)
+
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const res = await fetch("/api/settings")
+        if (res.ok) {
+          const data = await res.json()
+          if (data.dataSource) {
+            setDataSource(data.dataSource)
+          }
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoadingSource(false)
+      }
+    }
+    loadSettings()
+  }, [])
+
+  const toggleDataSource = async () => {
+    const next = dataSource === "live" ? "mock" : "live"
+    setDataSource(next)
+    try {
+      const currentRes = await fetch("/api/settings")
+      let current = {}
+      if (currentRes.ok) {
+        current = await currentRes.json()
+      }
+      await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...current, dataSource: next }),
+      })
+      window.location.reload()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const navItems = [
+    { href: "/", label: "Dashboard", icon: Home },
+    { href: "/services", label: "Services", icon: Layers },
+    { href: "/databases", label: "Databases", icon: Database },
+    { href: "/tracing", label: "Tracing", icon: Flame },
+    { href: "/indian-insights", label: "Indian Insights", icon: Map },
+    { href: "/ml-analytics", label: "ML Analytics", icon: Cpu },
+    { href: "/reports", label: "Reports", icon: FileText },
+    { href: "/builder", label: "Builder", icon: LayoutGrid },
+    { href: "/alerts", label: "Alerts", icon: AlertTriangle },
+    { href: "/settings", label: "Settings", icon: Settings },
+  ]
 
   // Mock alerts data
   const alerts = [
@@ -58,52 +118,23 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
         <nav className="flex-1 overflow-auto py-4 px-2">
           <div className="space-y-1">
-            <Button variant={pathname === "/" ? "default" : "ghost"} className="w-full justify-start gap-2" asChild>
-              <Link href="/">
-                <Home className="h-4 w-4" />
-                Dashboard
-              </Link>
-            </Button>
-            <Button
-              variant={pathname === "/services" ? "default" : "ghost"}
-              className="w-full justify-start gap-2"
-              asChild
-            >
-              <Link href="/services">
-                <Layers className="h-4 w-4" />
-                Services
-              </Link>
-            </Button>
-            <Button
-              variant={pathname === "/databases" ? "default" : "ghost"}
-              className="w-full justify-start gap-2"
-              asChild
-            >
-              <Link href="/databases">
-                <Database className="h-4 w-4" />
-                Databases
-              </Link>
-            </Button>
-            <Button
-              variant={pathname === "/alerts" ? "default" : "ghost"}
-              className="w-full justify-start gap-2"
-              asChild
-            >
-              <Link href="/alerts">
-                <AlertTriangle className="h-4 w-4" />
-                Alerts
-              </Link>
-            </Button>
-            <Button
-              variant={pathname === "/settings" ? "default" : "ghost"}
-              className="w-full justify-start gap-2"
-              asChild
-            >
-              <Link href="/settings">
-                <Settings className="h-4 w-4" />
-                Settings
-              </Link>
-            </Button>
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const active = pathname === item.href
+              return (
+                <Button
+                  key={item.href}
+                  variant={active ? "default" : "ghost"}
+                  className="w-full justify-start gap-2"
+                  asChild
+                >
+                  <Link href={item.href}>
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                </Button>
+              )
+            })}
           </div>
         </nav>
       </div>
@@ -129,6 +160,24 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </form>
           </div>
           <div className="flex items-center gap-2">
+            {/* Data Source Toggle */}
+            <div className="flex items-center gap-1.5 mr-2">
+              <span className="text-xs text-muted-foreground hidden md:inline">Mode:</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleDataSource}
+                disabled={loadingSource}
+                className={`gap-1.5 h-8 font-semibold transition-all ${
+                  dataSource === "live"
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 hover:text-emerald-500"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 hover:text-amber-500"
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${dataSource === "live" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                {dataSource === "live" ? "Live API" : "Mock Data"}
+              </Button>
+            </div>
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1">

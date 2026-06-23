@@ -1,3 +1,5 @@
+import { getDataSourceMode } from "@/lib/api-proxy"
+
 export const dynamic = "force-dynamic"
 
 function normalizeBase(value: string) {
@@ -49,7 +51,8 @@ async function getDashboardSnapshot(origin: string) {
 }
 
 export async function GET(request: Request) {
-  const backend = process.env.BACKEND_URL
+  const mode = getDataSourceMode()
+  const backend = mode === "mock" ? null : process.env.BACKEND_URL
   if (backend && backend.trim().length > 0) {
     const base = normalizeBase(backend)
     const token = await getBackendToken(base)

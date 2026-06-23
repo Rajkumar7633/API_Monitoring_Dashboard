@@ -94,13 +94,15 @@ export default function SettingsPage() {
   const [monitors, setMonitors] = useState<any[]>([])
   const [alertsCfg, setAlertsCfg] = useState<{ slackWebhookUrl: string; webhookUrl: string }>({ slackWebhookUrl: "", webhookUrl: "" })
   const [syntheticsCfg, setSyntheticsCfg] = useState<{ jitterPct: number; spreadStartMs: number }>({ jitterPct: 0.2, spreadStartMs: 2000 })
+  const [dataSource, setDataSource] = useState<string>("live")
+  const [initialDataSource, setInitialDataSource] = useState<string>("live")
 
   // Appearance local state
   const [appTheme, setAppTheme] = useState<string>(typeof window !== 'undefined' ? (localStorage.getItem('ui.theme') || 'dark') : 'dark')
   const [density, setDensity] = useState<string>(typeof window !== 'undefined' ? (localStorage.getItem('ui.density') || 'compact') : 'compact')
   const [chartAnim, setChartAnim] = useState<boolean>(typeof window !== 'undefined' ? (localStorage.getItem('ui.chartAnim') !== 'false') : true)
 
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+  const base = process.env.NEXT_PUBLIC_API_URL || ""
 
   useEffect(() => {
     // load alert thresholds
@@ -124,6 +126,10 @@ export default function SettingsPage() {
           setMonitors(Array.isArray(json?.monitors) ? json.monitors : [])
           setAlertsCfg({ slackWebhookUrl: json?.alerts?.slackWebhookUrl || "", webhookUrl: json?.alerts?.webhookUrl || "" })
           setSyntheticsCfg({ jitterPct: Number(json?.synthetics?.jitterPct ?? 0.2), spreadStartMs: Number(json?.synthetics?.spreadStartMs ?? 2000) })
+          if (json?.dataSource) {
+            setDataSource(json.dataSource)
+            setInitialDataSource(json.dataSource)
+          }
         }
       } catch {}
     }
@@ -150,14 +156,17 @@ export default function SettingsPage() {
   const saveSettings = async () => {
     setSettingsSaving(true)
     try {
-      const payload = { apiKeys, monitors, alerts: alertsCfg, synthetics: syntheticsCfg }
+      const payload = { apiKeys, monitors, alerts: alertsCfg, synthetics: syntheticsCfg, dataSource }
       const res = await fetch(`${base}/api/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
       if (!res.ok) throw new Error("Failed to save settings")
-      toast({ title: "Settings saved", description: "Synthetics reloaded with new configuration." })
+      toast({ title: "Settings saved", description: "Telemetry configurations updated." })
+      if (dataSource !== initialDataSource) {
+        window.location.reload()
+      }
     } catch (e) {
       console.error(e)
       toast({ title: "Save failed", description: (e as any)?.message || "Unknown error", variant: "destructive" })
@@ -275,6 +284,18 @@ export default function SettingsPage() {
               <CardContent>
                 <div className="space-y-6">
                   <div className="space-y-2">
+                    <Label htmlFor="data-source">Telemetry Data Source Mode</Label>
+                    <Select value={dataSource} onValueChange={(val) => setDataSource(val)}>
+                      <SelectTrigger id="data-source">
+                        <SelectValue placeholder="Select telemetry data source mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="live">Live Connection (Real Backend & OTel streams)</SelectItem>
+                        <SelectItem value="mock">Local Mock Mode (Realistic synthetic data)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="username">Username</Label>
                     <Input id="username" defaultValue="admin" />
                   </div>
@@ -306,7 +327,9 @@ export default function SettingsPage() {
                     <Switch id="analytics" defaultChecked />
                   </div>
                   <div className="flex justify-end">
-                    <Button>Save Changes</Button>
+                    <Button onClick={saveSettings} disabled={settingsSaving}>
+                      {settingsSaving ? "Saving..." : "Save Changes"}
+                    </Button>
                   </div>
                 </div>
               </CardContent>

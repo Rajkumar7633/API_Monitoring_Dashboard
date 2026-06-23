@@ -1,7 +1,20 @@
 {
+  "schemaVersion": "1.0",
+  "dataSource": "live",
   "apiKeys": {
     "production": "",
     "development": ""
   },
-  "monitors": []
+  "monitors": [],
+  "alerts": {
+    "slackWebhookUrl": "",
+    "webhookUrl": ""
+  },
+  "synthetics": {
+    "jitterPct": 0.2,
+    "spreadStartMs": 2000
+  },
+  "tracing": {
+    "otlpEndpoint": ""
+  }
 }

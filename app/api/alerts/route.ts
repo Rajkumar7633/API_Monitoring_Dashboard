@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import type { Alert } from "@/types/api-types"
 
+export const dynamic = "force-dynamic"
+
 export async function GET() {
   const alerts: Alert[] = [
     { id: 1, type: "error", message: "High error rate on /api/auth endpoint", time: "2 minutes ago" },

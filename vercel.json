@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_API_URL": "https://api-monitoring-dashboard-git-main-rajkumar7633s-projects.vercel.app"
+  },
+  "functions": {
+    "api/dashboard-data.js": {
+      "maxDuration": 10
+    },
+    "api/stream.js": {
+      "maxDuration": 30
+    }
+  }
+}

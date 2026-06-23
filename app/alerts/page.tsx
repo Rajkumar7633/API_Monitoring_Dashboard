@@ -20,7 +20,7 @@ export default function AlertsPage() {
   const { toast } = useToast()
   const [pending, setPending] = useState<Record<string, boolean>>({})
 
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+  const base = process.env.NEXT_PUBLIC_API_URL || ""
 
   // Summary stats
   const summary = useMemo(() => {

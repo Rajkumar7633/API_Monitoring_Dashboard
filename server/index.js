@@ -27,7 +27,8 @@ const {
   createAuthMiddleware, 
   requirePermission, 
   ROLES, 
-  PERMISSIONS 
+  PERMISSIONS,
+  ROLE_PERMISSIONS
 } = require("./auth")
 const { IndianFeatures } = require("./indian-features")
 const { MLAlertOptimizer } = require("./ml-alerts")
@@ -160,7 +161,8 @@ app.post('/api/auth/login', (req, res) => {
       permissions: ROLE_PERMISSIONS[user.role] || []
     })
   } catch (e) {
-    res.status(500).json({ error: 'Login failed' })
+    console.error("Login failed error:", e)
+    res.status(500).json({ error: 'Login failed', details: e?.message || String(e) })
   }
 })
 
@@ -271,9 +273,10 @@ function readSettings() {
     if (!json.alerts) json.alerts = { slackWebhookUrl: "", webhookUrl: "" }
     if (!json.synthetics) json.synthetics = { jitterPct: 0.2, spreadStartMs: 2000 }
     if (!json.tracing) json.tracing = { otlpEndpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || '' }
+    if (!json.dataSource) json.dataSource = "live"
     return json
   } catch (_) {
-    return { schemaVersion: "1.0", apiKeys: { production: "", development: "" }, monitors: [], alerts: { slackWebhookUrl: "", webhookUrl: "" }, synthetics: { jitterPct: 0.2, spreadStartMs: 2000 } }
+    return { schemaVersion: "1.0", apiKeys: { production: "", development: "" }, monitors: [], alerts: { slackWebhookUrl: "", webhookUrl: "" }, synthetics: { jitterPct: 0.2, spreadStartMs: 2000 }, dataSource: "live" }
   }
 }
 function writeSettings(obj) {
@@ -295,6 +298,7 @@ function writeSettings(obj) {
 
   const safe = {
     schemaVersion: String(obj?.schemaVersion || "1.0"),
+    dataSource: String(obj?.dataSource || "live"),
     apiKeys: {
       production: String(obj?.apiKeys?.production || ""),
       development: String(obj?.apiKeys?.development || ""),
@@ -864,7 +868,7 @@ app.get("/api/reports/templates", (req, res) => {
 
 app.post("/api/reports/generate", createAuthMiddleware(userManagement), async (req, res) => {
   try {
-    const { templateId, parameters } = req.body
+    const { templateId, parameters = {} } = req.body
     const metricsData = metricsCollector.getAllData()
     
     // Add user ID to parameters
@@ -930,7 +934,7 @@ app.get("/api/reports/history", createAuthMiddleware(userManagement), (req, res)
 
 app.post("/api/reports/schedule", createAuthMiddleware(userManagement), (req, res) => {
   try {
-    const { templateId, parameters, schedule } = req.body
+    const { templateId, parameters = {}, schedule } = req.body
     parameters.userId = req.user.userId
     
     const scheduledReport = reportingEngine.scheduleReport(templateId, parameters, schedule)

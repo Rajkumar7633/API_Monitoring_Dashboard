@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import type { ApiLog } from "@/types/api-types"
 
+export const dynamic = "force-dynamic"
+
 export async function GET(request: Request) {
   // Get endpoint and time range from query parameters
   const { searchParams } = new URL(request.url)

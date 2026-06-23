@@ -35,7 +35,7 @@ export function ErrorLogs({ logs, loading }: ErrorLogsProps) {
   const [snapError, setSnapError] = useState<string | null>(null)
   const [curl, setCurl] = useState<string>("")
   const { toast } = useToast()
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+  const base = process.env.NEXT_PUBLIC_API_URL || ""
 
   const handleDetails = (log: ApiLog) => {
     setSelected(log)

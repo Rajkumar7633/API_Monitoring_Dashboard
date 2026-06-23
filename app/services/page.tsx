@@ -16,7 +16,7 @@ export default function ServicesPage() {
   const [synStatus, setSynStatus] = useState<{ running: boolean; lastResult: any[] } | null>(null)
   const [telemetry, setTelemetry] = useState<{ otlpEndpoint: string; snapshots24h: number } | null>(null)
 
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+  const base = process.env.NEXT_PUBLIC_API_URL || ""
 
   const runHealth = async () => {
     try {

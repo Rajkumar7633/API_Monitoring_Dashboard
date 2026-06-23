@@ -1,20 +1,23 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { SocketProvider } from "@/lib/socket-provider"
 import { LanguageProvider } from "@/contexts/LanguageContext"
 
-const inter = Inter({ subsets: ["latin"] })
+export const viewport: Viewport = {
+  themeColor: "#3b82f6",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+}
 
 export const metadata: Metadata = {
   title: "API Monitoring Dashboard",
   description: "Real-time observability dashboard for monitoring API performance",
   generator: 'v0.dev',
   manifest: '/manifest.json',
-  themeColor: '#3b82f6',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -38,7 +41,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className="antialiased">
         <LanguageProvider>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
             <SocketProvider>{children}</SocketProvider>
@@ -48,7 +51,5 @@ export default function RootLayout({
     </html>
   )
 }
-
-
 
 import './globals.css'

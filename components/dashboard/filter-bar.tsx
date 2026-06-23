@@ -25,7 +25,7 @@ export function FilterBar({
 }: FilterBarProps) {
   const { toast } = useToast()
   const [burstRunning, setBurstRunning] = useState(false)
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
+  const base = process.env.NEXT_PUBLIC_API_URL || ""
 
   const generateLoad = async () => {
     if (burstRunning) return

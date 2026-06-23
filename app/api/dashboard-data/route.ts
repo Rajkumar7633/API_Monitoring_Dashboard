@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { getDataSourceMode } from "@/lib/api-proxy"
 import type {
   ApiEndpoint,
   ApiLog,
@@ -82,6 +83,9 @@ async function getBackendToken(base: string) {
 }
 
 async function proxyIfConfigured(pathnameWithQuery: string) {
+  const mode = getDataSourceMode()
+  if (mode === "mock") return null
+
   const backend = process.env.BACKEND_URL
   if (!backend || backend.trim().length === 0) return null
 

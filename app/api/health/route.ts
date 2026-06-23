@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
+import { getDataSourceMode } from "@/lib/api-proxy"
+
+export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const backend = process.env.BACKEND_URL
+  const mode = getDataSourceMode()
+  const backend = mode === "mock" ? null : process.env.BACKEND_URL
   if (backend && backend.trim().length > 0) {
     try {
       const res = await fetch(`${backend.replace(/\/+$/g, "")}/api/health`, {

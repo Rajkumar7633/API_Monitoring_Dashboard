@@ -128,7 +128,7 @@ class ReportingEngine {
       const recommendations = this.generateRecommendations(processedData, insights)
       
       // Create report content based on format
-      const reportContent = await this.createReportContent(processedData, template, parameters.format)
+      const reportContent = await this.createReportContent(processedData, template, report.format)
       
       // Update report
       report.data = reportContent
