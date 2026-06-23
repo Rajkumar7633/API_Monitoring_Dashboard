@@ -28,6 +28,9 @@ export function ErrorLogs({ logs, loading }: ErrorLogsProps) {
     return out
   }, [logs])
 
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<ApiLog | null>(null)
   const [snap, setSnap] = useState<any | null>(null)
@@ -36,6 +39,14 @@ export function ErrorLogs({ logs, loading }: ErrorLogsProps) {
   const [curl, setCurl] = useState<string>("")
   const { toast } = useToast()
   const base = process.env.NEXT_PUBLIC_API_URL || ""
+
+  const totalPages = Math.ceil(uniqueLogs.length / itemsPerPage) || 1
+  const activePage = Math.min(currentPage, totalPages)
+
+  const paginatedLogs = useMemo(() => {
+    const startIndex = (activePage - 1) * itemsPerPage
+    return uniqueLogs.slice(startIndex, startIndex + itemsPerPage)
+  }, [uniqueLogs, activePage, itemsPerPage])
 
   const handleDetails = (log: ApiLog) => {
     setSelected(log)
@@ -131,37 +142,71 @@ export function ErrorLogs({ logs, loading }: ErrorLogsProps) {
             No error logs found for the selected criteria.
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Endpoint</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Error Message</TableHead>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {uniqueLogs.map((log) => (
-                <TableRow key={String(log.id)}>
-                  <TableCell className="font-medium">{log.endpoint}</TableCell>
-                  <TableCell>
-                    <Badge variant="destructive">{log.status}</Badge>
-                  </TableCell>
-                  <TableCell>{log.message}</TableCell>
-                  <TableCell>{new Date(log.timestamp).toLocaleTimeString()}</TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => handleDetails(log)}>
-                      Details
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => viewSnapshot(log.endpoint)}>
-                      View Snapshot
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="space-y-4">
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Endpoint</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Error Message</TableHead>
+                    <TableHead>Timestamp</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedLogs.map((log) => (
+                    <TableRow key={String(log.id)}>
+                      <TableCell className="font-medium">{log.endpoint}</TableCell>
+                      <TableCell>
+                        <Badge variant="destructive">{log.status}</Badge>
+                      </TableCell>
+                      <TableCell>{log.message}</TableCell>
+                      <TableCell>{new Date(log.timestamp).toLocaleTimeString()}</TableCell>
+                      <TableCell className="space-x-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleDetails(log)}>
+                          Details
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => viewSnapshot(log.endpoint)}>
+                          View Snapshot
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between py-2 border-t pt-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {Math.min(uniqueLogs.length, (activePage - 1) * itemsPerPage + 1)} to{" "}
+                  {Math.min(uniqueLogs.length, activePage * itemsPerPage)} of {uniqueLogs.length} entries
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={activePage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm font-medium">
+                    Page {activePage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                    disabled={activePage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
