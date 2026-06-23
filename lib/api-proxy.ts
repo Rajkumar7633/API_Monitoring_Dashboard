@@ -85,7 +85,11 @@ async function getBackendToken(base: string) {
   return token
 }
 
-export async function proxyRequest(request: Request, pathAndQuery: string) {
+export async function proxyRequest(
+  request: Request,
+  pathAndQuery: string,
+  options?: { fallbackOn404?: boolean }
+) {
   const mode = getDataSourceMode()
   if (mode === "mock") return null
 
@@ -125,6 +129,11 @@ export async function proxyRequest(request: Request, pathAndQuery: string) {
       body,
       cache: "no-store",
     })
+
+    // If caller asked for 404 fallback, return null so the route can serve its own mock
+    if (res.status === 404 && options?.fallbackOn404) {
+      return null
+    }
 
     const bodyBuffer = await res.arrayBuffer()
     return new Response(bodyBuffer, {

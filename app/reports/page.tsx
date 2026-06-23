@@ -58,9 +58,26 @@ export default function ReportsPage() {
     }
   }
 
-  const handleDownload = (id: string, format: string) => {
-    toast({ title: "Download started", description: `Fetching file report-${id}.${format}...` })
-    window.open(`${base}/api/reports/${id}/download`, "_blank")
+  const handleDownload = async (id: string, format: string) => {
+    toast({ title: "Download started", description: `Fetching report-${id}.${format}…` })
+    try {
+      const res = await fetch(`${base}/api/reports/${id}/download`)
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `report-${id}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast({ title: "Download complete", description: `report-${id}.${format} saved successfully.` })
+    } catch (e: any) {
+      toast({ title: "Download failed", description: e.message, variant: "destructive" })
+    }
   }
 
   return (
