@@ -1,0 +1,21 @@
+services:
+  # Express backend — runs server/index.js on Render
+  - type: web
+    name: api-monitoring-backend
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SIMULATOR_AUTOSTART
+        value: "true"
+      - key: SIMULATOR_RPS
+        value: "8"
+      - key: FRONTEND_URL
+        sync: false
+        # ⚠️  Set this in your Render dashboard to your Vercel frontend URL
+        # Example: https://api-monitoring-dashboard.vercel.app

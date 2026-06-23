@@ -16,15 +16,15 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
-.env*
+# env files — keep .env.local secret, but allow .env.example for reference
+.env.local
+.env*.local
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
-next-env.d.tsnode_modules/
-data/
-.env
 
+# runtime data — never commit these
+data/

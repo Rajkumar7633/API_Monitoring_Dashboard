@@ -50,22 +50,32 @@ function normalizeOrigin(value) {
 
 const envList = (process.env.FRONTEND_URLS || "").split(",").map(s => s.trim()).filter(Boolean)
 const single = process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []
-const defaults = ["http://localhost:3000"]
+const defaults = ["http://localhost:3000", "http://localhost:3001"]
 const allowList = [...new Set([...envList, ...single, ...defaults].map(normalizeOrigin))]
+
+// Patterns that are always allowed (deployment platforms)
+const allowedPatterns = [
+  /^https:\/\/.*\.vercel\.app$/,
+  /^https:\/\/.*\.onrender\.com$/,
+]
 
 app.use((req, res, next) => { res.setHeader('Vary', 'Origin'); next(); })
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow non-browser requests (no Origin)
+      // Allow non-browser requests (curl, server-to-server, etc.)
       if (!origin) return callback(null, true)
       const o = normalizeOrigin(origin)
+      // Check explicit allowlist
       if (allowList.includes(o)) return callback(null, true)
+      // Check platform wildcard patterns (*.vercel.app, *.onrender.com)
+      if (allowedPatterns.some(p => p.test(o))) return callback(null, true)
       return callback(new Error(`CORS not allowed for origin: ${origin}`), false)
     },
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization", "x-request-id"],
   }),
 )
 
