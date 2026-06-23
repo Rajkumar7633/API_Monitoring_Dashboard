@@ -4,6 +4,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "env": {
+    "BACKEND_URL": "https://api-monitoring-backend-yuwr.onrender.com",
+    "BACKEND_USERNAME": "admin",
+    "BACKEND_PASSWORD": "admin123",
     "NEXT_PUBLIC_API_URL": ""
   },
   "headers": [

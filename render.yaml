@@ -16,6 +16,6 @@ services:
       - key: SIMULATOR_RPS
         value: "8"
       - key: FRONTEND_URL
-        sync: false
-        # ⚠️  Set this in your Render dashboard to your Vercel frontend URL
-        # Example: https://api-monitoring-dashboard.vercel.app
+        value: https://api-monitoring-dashboard.vercel.app
+      - key: FRONTEND_URLS
+        value: https://api-monitoring-dashboard.vercel.app,https://api-monitoring-dashboard-git-main-rajkumar7633s-projects.vercel.app
